@@ -1,0 +1,71 @@
+/* Notifications popover — rows inside the glass paint no surface (rule 3). */
+
+.popover { width: min(380px, calc(100vw - 16px)); max-width: none; padding: var(--space-2); }
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-1) var(--space-2) var(--space-2);
+}
+.title { font-size: var(--text-md); font-weight: var(--weight-semibold); }
+.textBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--accent-text);
+  cursor: pointer;
+}
+
+.list { list-style: none; max-height: 360px; overflow-y: auto; }
+.item {
+  display: flex;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2);
+  text-align: left;
+  cursor: pointer;
+}
+.dot { flex-shrink: 0; width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; }
+.dot[data-unread='true'] { background: var(--accent-text); }
+.text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.itemTitle { font-size: var(--text-sm); font-weight: var(--weight-medium); }
+.body {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+.time { font-size: var(--text-2xs); color: var(--text-muted); }
+
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.all {
+  display: block;
+  width: 100%;
+  margin-top: var(--space-1);
+  padding: var(--space-2);
+  border: 0;
+  border-top: 1px solid var(--glass-border);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  background: transparent;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--accent-text);
+  text-align: center;
+  cursor: pointer;
+}
+.all:hover { background: color-mix(in srgb, var(--text-primary) 7%, transparent); }

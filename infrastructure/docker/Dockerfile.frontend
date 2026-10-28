@@ -1,0 +1,75 @@
+# ============================================================
+# OPSYN DOCKERFILE — Frontend (Multi-stage + Nginx)
+# infrastructure/docker/Dockerfile.frontend
+# Build context: ./frontend/
+# ============================================================
+
+# ── Stage 0: Dev server (used by docker-compose) ─────────────
+FROM node:20-alpine AS dev
+
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm install --legacy-peer-deps --no-audit --no-fund
+
+COPY . .
+
+EXPOSE 5173
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+
+# ── Stage 1: Build React app ─────────────────────────────────
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copy dependency manifests first (layer cache optimisation)
+COPY package.json package-lock.json* ./
+
+# Use npm install (not npm ci) so lock file skew never breaks builds
+# --legacy-peer-deps required for React 18 peer dep compatibility
+RUN npm install --legacy-peer-deps --no-audit --no-fund
+
+# Copy source and build
+COPY . .
+RUN npm run build
+
+# ── Stage 2: Nginx static server ─────────────────────────────
+FROM nginx:alpine AS runtime
+
+# Copy built assets
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Inline nginx config (no cross-context COPY needed)
+RUN printf 'server {\n\
+    listen 80;\n\
+    server_name _;\n\
+    root /usr/share/nginx/html;\n\
+    index index.html;\n\
+\n\
+    gzip on;\n\
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml;\n\
+\n\
+    location ~* \\.(js|css|png|svg|ico|woff2?)$ {\n\
+        expires 1y;\n\
+        add_header Cache-Control "public, immutable";\n\
+        try_files $uri =404;\n\
+    }\n\
+\n\
+    location /health {\n\
+        access_log off;\n\
+        return 200 "ok\\n";\n\
+        add_header Content-Type text/plain;\n\
+    }\n\
+\n\
+    location / {\n\
+        try_files $uri $uri/ /index.html;\n\
+        add_header Cache-Control "no-cache, no-store, must-revalidate";\n\
+    }\n\
+}\n' > /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=5s \
+  CMD wget -qO- http://localhost/health || exit 1
+
+CMD ["nginx", "-g", "daemon off;"]

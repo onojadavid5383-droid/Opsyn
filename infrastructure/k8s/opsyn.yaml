@@ -1,0 +1,295 @@
+# ============================================================
+# OPSYN KUBERNETES MANIFESTS — infrastructure/k8s/
+# Deployment + Service + Ingress for backend, frontend, redis
+# Powered by SlimTech
+# ============================================================
+
+# ── Namespace ─────────────────────────────────────────────────
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: opsyn
+  labels:
+    app: opsyn
+    managed-by: slimtech
+
+---
+# ── Secret (inject from CI/CD, never commit real values) ──────
+apiVersion: v1
+kind: Secret
+metadata:
+  name: opsyn-secrets
+  namespace: opsyn
+type: Opaque
+stringData:
+  DATABASE_URL:    "postgresql+asyncpg://opsyn:CHANGE_ME@postgres-svc:5432/opsyn"
+  REDIS_URL:       "redis://redis-svc:6379/0"
+  SECRET_KEY:      "CHANGE_ME_minimum_32_character_secret_key"
+  SMTP_PASSWORD:   "CHANGE_ME"
+  CELERY_BROKER_URL: "redis://redis-svc:6379/1"
+
+---
+# ── ConfigMap (non-sensitive config) ─────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opsyn-config
+  namespace: opsyn
+data:
+  ENVIRONMENT:                  "production"
+  APP_NAME:                     "Opsyn"
+  FROM_EMAIL:                   "no-reply@opsyn.ng"
+  FROM_NAME:                    "Opsyn Platform"
+  FRONTEND_URL:                 "https://opsyn.ng"
+  ALLOWED_ORIGINS:              "https://opsyn.ng"
+  ACCESS_TOKEN_EXPIRE_MINUTES:  "15"
+  REFRESH_TOKEN_EXPIRE_DAYS:    "7"
+  SMTP_HOST:                    "smtp.sendgrid.net"
+  SMTP_PORT:                    "587"
+  SMTP_USER:                    "apikey"
+  ALGORITHM:                    "HS256"
+  BCRYPT_ROUNDS:                "12"
+
+---
+# ── Backend Deployment ────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opsyn-backend
+  namespace: opsyn
+  labels:
+    app: opsyn-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: opsyn-backend
+  template:
+    metadata:
+      labels:
+        app: opsyn-backend
+    spec:
+      containers:
+        - name: opsyn-backend
+          image: ghcr.io/slimtech/opsyn/opsyn-backend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: opsyn-config
+            - secretRef:
+                name: opsyn-secrets
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu:    "250m"
+            limits:
+              memory: "512Mi"
+              cpu:    "500m"
+
+---
+# ── Backend Service ───────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: opsyn-backend-svc
+  namespace: opsyn
+spec:
+  selector:
+    app: opsyn-backend
+  ports:
+    - port: 8000
+      targetPort: 8000
+  type: ClusterIP
+
+---
+# ── Celery Worker Deployment ──────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opsyn-celery
+  namespace: opsyn
+  labels:
+    app: opsyn-celery
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: opsyn-celery
+  template:
+    metadata:
+      labels:
+        app: opsyn-celery
+    spec:
+      containers:
+        - name: opsyn-celery
+          image: ghcr.io/slimtech/opsyn/opsyn-backend:latest
+          command: ["celery", "-A", "app.core.celery_app", "worker", "--loglevel=info", "--concurrency=4"]
+          envFrom:
+            - configMapRef:
+                name: opsyn-config
+            - secretRef:
+                name: opsyn-secrets
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu:    "250m"
+            limits:
+              memory: "512Mi"
+              cpu:    "500m"
+
+---
+# ── Frontend Deployment ───────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opsyn-frontend
+  namespace: opsyn
+  labels:
+    app: opsyn-frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: opsyn-frontend
+  template:
+    metadata:
+      labels:
+        app: opsyn-frontend
+    spec:
+      containers:
+        - name: opsyn-frontend
+          image: ghcr.io/slimtech/opsyn/opsyn-frontend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu:    "100m"
+            limits:
+              memory: "128Mi"
+              cpu:    "200m"
+
+---
+# ── Frontend Service ──────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: opsyn-frontend-svc
+  namespace: opsyn
+spec:
+  selector:
+    app: opsyn-frontend
+  ports:
+    - port: 80
+      targetPort: 80
+  type: ClusterIP
+
+---
+# ── Redis Deployment ──────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: opsyn
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu:    "100m"
+            limits:
+              memory: "256Mi"
+              cpu:    "200m"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-svc
+  namespace: opsyn
+spec:
+  selector:
+    app: redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+  type: ClusterIP
+
+---
+# ── Ingress (HTTPS via cert-manager) ─────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: opsyn-ingress
+  namespace: opsyn
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  tls:
+    - hosts:
+        - opsyn.ng
+        - api.opsyn.ng
+      secretName: opsyn-tls
+  rules:
+    # API subdomain → backend
+    - host: api.opsyn.ng
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: opsyn-backend-svc
+                port:
+                  number: 8000
+    # Main domain → frontend (SPA)
+    - host: opsyn.ng
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: opsyn-frontend-svc
+                port:
+                  number: 80

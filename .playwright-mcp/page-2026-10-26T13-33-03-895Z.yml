@@ -1,0 +1,307 @@
+- generic [ref=f3e1]:
+  - generic [ref=f3e3]:
+    - link [ref=f3e460] [cursor=pointer]:
+      - /url: "#main"
+      - text: Skip to content
+    - complementary [ref=f3e461]:
+      - link [ref=f3e462] [cursor=pointer]:
+        - /url: /dashboard
+        - generic [ref=f3e17]: OpSyn
+      - navigation [ref=f3e464]:
+        - generic [ref=f3e19]:
+          - generic [ref=f3e20]: Monitor
+          - list [ref=f3e465]:
+            - listitem [ref=f3e22]:
+              - link [ref=f3e466] [cursor=pointer]:
+                - /url: /dashboard
+                - generic [ref=f3e29]: Command Center
+            - listitem [ref=f3e30]:
+              - link [ref=f3e467] [cursor=pointer]:
+                - /url: /outage
+                - generic [ref=f3e37]: Alarms & outages
+            - listitem [ref=f3e38]:
+              - link [ref=f3e468] [cursor=pointer]:
+                - /url: /network
+                - generic [ref=f3e42]: Network map
+        - generic [ref=f3e43]:
+          - generic [ref=f3e44]: Operate
+          - list [ref=f3e469]:
+            - listitem [ref=f3e46]:
+              - link [ref=f3e470] [cursor=pointer]:
+                - /url: /tasks
+                - generic [ref=f3e51]: Tasks
+            - listitem [ref=f3e52]:
+              - link [ref=f3e471] [cursor=pointer]:
+                - /url: /projects
+                - generic [ref=f3e56]: Projects
+            - listitem [ref=f3e57]:
+              - link [ref=f3e472] [cursor=pointer]:
+                - /url: /shifts
+                - generic [ref=f3e63]: Shifts
+            - listitem [ref=f3e64]:
+              - link [ref=f3e473] [cursor=pointer]:
+                - /url: /customers
+                - generic [ref=f3e70]: Customers
+        - generic [ref=f3e71]:
+          - generic [ref=f3e72]: Engineer
+          - list [ref=f3e474]:
+            - listitem [ref=f3e74]:
+              - link [ref=f3e475] [cursor=pointer]:
+                - /url: /infrastructure
+                - generic [ref=f3e79]: Infrastructure
+            - listitem [ref=f3e80]:
+              - link [ref=f3e476] [cursor=pointer]:
+                - /url: /fttx-designer
+                - generic [ref=f3e87]: FTTx Designer
+        - generic [ref=f3e88]:
+          - generic [ref=f3e89]: Analyze
+          - list [ref=f3e477]:
+            - listitem [ref=f3e91]:
+              - link [ref=f3e478] [cursor=pointer]:
+                - /url: /reports
+                - generic [ref=f3e95]: Reports
+            - listitem [ref=f3e96]:
+              - link [ref=f3e479] [cursor=pointer]:
+                - /url: /activity
+                - generic [ref=f3e100]: Activity
+            - listitem [ref=f3e101]:
+              - link [ref=f3e480] [cursor=pointer]:
+                - /url: /audit
+                - generic [ref=f3e106]: Audit log
+        - generic [ref=f3e107]:
+          - generic [ref=f3e108]: Admin
+          - list [ref=f3e481]:
+            - listitem [ref=f3e110]:
+              - link [ref=f3e482] [cursor=pointer]:
+                - /url: /staff
+                - generic [ref=f3e124]: People
+            - listitem [ref=f3e125]:
+              - link [ref=f3e483] [cursor=pointer]:
+                - /url: /org/workflows
+                - generic [ref=f3e131]: Workflows
+            - listitem [ref=f3e132]:
+              - link [ref=f3e484] [cursor=pointer]:
+                - /url: /form-builder
+                - generic [ref=f3e137]: Forms
+            - listitem [ref=f3e138]:
+              - link [ref=f3e485] [cursor=pointer]:
+                - /url: /settings
+                - generic [ref=f3e143]: Settings
+      - button [expanded] [ref=f3e486] [cursor=pointer]:
+        - generic [ref=f3e149]: Collapse
+    - banner [ref=f3e150]:
+      - navigation [ref=f3e487]:
+        - list [ref=f3e152]:
+          - listitem [ref=f3e153]:
+            - generic [ref=f3e154]: Admin
+          - listitem [ref=f3e155]:
+            - text: /
+            - link [ref=f3e488] [cursor=pointer]:
+              - /url: /form-builder
+              - text: Forms
+          - listitem [ref=f3e157]:
+            - text: /
+            - generic [ref=f3e158]: Details
+      - button [ref=f3e489] [cursor=pointer]:
+        - generic [ref=f3e163]: Search
+        - generic [aria-hidden] [ref=f3e164]: Ctrl K
+      - button [ref=f3e490] [cursor=pointer]
+      - button [ref=f3e491] [cursor=pointer]
+      - button [ref=f3e492] [cursor=pointer]:
+        - generic [aria-hidden] [ref=f3e177]: DA
+        - generic [aria-hidden] [ref=f3e178]:
+          - generic [ref=f3e179]: david.onoja
+          - generic [ref=f3e180]: Admin
+    - region [ref=f3e493]:
+      - link [ref=f3e494] [cursor=pointer]:
+        - /url: /outage?severity=critical
+        - generic [ref=f3e186]: "0"
+        - generic [ref=f3e187]: Critical
+      - link [ref=f3e495] [cursor=pointer]:
+        - /url: /outage?severity=high
+        - generic [ref=f3e192]: "0"
+        - generic [ref=f3e193]: High
+      - link [ref=f3e496] [cursor=pointer]:
+        - /url: /outage?severity=warning
+        - generic [ref=f3e198]: "0"
+        - generic [ref=f3e199]: Warning
+      - link [ref=f3e497] [cursor=pointer]:
+        - /url: /outage?severity=low
+        - generic [ref=f3e204]: "0"
+        - generic [ref=f3e205]: Low
+      - link [ref=f3e498] [cursor=pointer]:
+        - /url: /outage?view=sla
+        - generic [ref=f3e211]: "0"
+        - generic [ref=f3e212]: SLA at risk
+      - link [ref=f3e499] [cursor=pointer]:
+        - /url: /shifts
+        - generic [ref=f3e219]: "2"
+        - generic [ref=f3e220]: On call
+      - generic [ref=f3e221]: Updated 14:32
+    - main [ref=f3e224]:
+      - generic [ref=f3e229]:
+        - heading [level=1] [ref=f3e500]: Form builder
+        - generic [ref=f3e231]:
+          - generic [ref=f3e232]: Form Builder
+          - combobox [ref=f3e501] [cursor=pointer]:
+            - generic [ref=f3e235]: Test Customer Form
+          - generic [ref=f3e238]: published
+          - button [ref=f3e502] [cursor=pointer]: Versions (1)
+          - button [ref=f3e503] [cursor=pointer]: Associations
+          - button [ref=f3e504] [cursor=pointer]: Preview
+          - button [ref=f3e505] [cursor=pointer]: Submissions
+          - button [ref=f3e506] [cursor=pointer]: Re-publish
+          - button [ref=f3e507] [cursor=pointer]: Archive
+          - button [ref=f3e508] [cursor=pointer]: + New Schema
+        - generic [ref=f3e246]:
+          - generic [ref=f3e247]: "10"
+          - generic [ref=f3e248]: pending table changes — 5 columns to add, 5 to drop
+          - button [ref=f3e509] [cursor=pointer]: Review & apply
+        - generic [ref=f3e250]:
+          - generic [ref=f3e251]:
+            - generic [ref=f3e252]: Field Types
+            - generic [ref=f3e253]:
+              - generic [ref=f3e254]: Basic
+              - button [ref=f3e510] [cursor=pointer]:
+                - generic [ref=f3e259]: Short Text
+              - button [ref=f3e511] [cursor=pointer]:
+                - generic [ref=f3e264]: Long Text
+              - button [ref=f3e512] [cursor=pointer]:
+                - generic [ref=f3e269]: Integer
+              - button [ref=f3e513] [cursor=pointer]:
+                - generic [ref=f3e274]: Decimal Number
+              - button [ref=f3e514] [cursor=pointer]:
+                - generic [ref=f3e279]: Yes / No
+              - button [ref=f3e515] [cursor=pointer]:
+                - generic [ref=f3e284]: Date
+              - button [ref=f3e516] [cursor=pointer]:
+                - generic [ref=f3e289]: Date & Time
+              - button [ref=f3e517] [cursor=pointer]:
+                - generic [ref=f3e294]: Time
+              - button [ref=f3e518] [cursor=pointer]:
+                - generic [ref=f3e299]: Email Address
+              - button [ref=f3e519] [cursor=pointer]:
+                - generic [ref=f3e304]: Phone Number
+              - button [ref=f3e520] [cursor=pointer]:
+                - generic [ref=f3e309]: URL
+            - generic [ref=f3e310]:
+              - generic [ref=f3e311]: Choice
+              - button [ref=f3e521] [cursor=pointer]:
+                - generic [ref=f3e316]: Dropdown
+              - button [ref=f3e522] [cursor=pointer]:
+                - generic [ref=f3e321]: Multi-Select
+              - button [ref=f3e523] [cursor=pointer]:
+                - generic [ref=f3e326]: Radio Buttons
+            - generic [ref=f3e327]:
+              - generic [ref=f3e328]: Media
+              - button [ref=f3e524] [cursor=pointer]:
+                - generic [ref=f3e333]: File Upload
+              - button [ref=f3e525] [cursor=pointer]:
+                - generic [ref=f3e338]: Image Upload
+              - button [ref=f3e526] [cursor=pointer]:
+                - generic [ref=f3e343]: Signature
+            - generic [ref=f3e344]:
+              - generic [ref=f3e345]: Structured
+              - button [ref=f3e527] [cursor=pointer]:
+                - generic [ref=f3e350]: GPS Coordinates
+              - button [ref=f3e528] [cursor=pointer]:
+                - generic [ref=f3e355]: Address
+              - button [ref=f3e529] [cursor=pointer]:
+                - generic [ref=f3e360]: Currency Amount
+              - button [ref=f3e530] [cursor=pointer]:
+                - generic [ref=f3e365]: Star Rating
+            - generic [ref=f3e366]:
+              - generic [ref=f3e367]: Advanced
+              - button [ref=f3e531] [cursor=pointer]:
+                - generic [ref=f3e372]: Lookup
+              - button [ref=f3e532] [cursor=pointer]:
+                - generic [ref=f3e377]: Computed (Read-only)
+            - generic [ref=f3e378]:
+              - generic [ref=f3e379]: Layout
+              - button [ref=f3e533] [cursor=pointer]:
+                - generic [ref=f3e384]: Section Header
+          - generic [ref=f3e386]:
+            - generic [ref=f3e387]:
+              - generic [ref=f3e388]: Test Customer Form
+              - generic [ref=f3e389]: v1 · customer · 5 fieldstest_customer_form
+            - generic [ref=f3e390]:
+              - generic [ref=f3e391] [cursor=pointer]:
+                - generic [ref=f3e392]:
+                  - button [disabled] [ref=f3e534]: ▲
+                  - button [ref=f3e535]: ▼
+                - generic [ref=f3e398]:
+                  - generic [ref=f3e399]: Full Name*
+                  - generic [ref=f3e400]: full_name · string
+                - generic [ref=f3e401]: full
+                - button [ref=f3e536]: ✕
+              - generic [ref=f3e404] [cursor=pointer]:
+                - generic [ref=f3e405]:
+                  - button [ref=f3e537]: ▲
+                  - button [ref=f3e538]: ▼
+                - generic [ref=f3e411]:
+                  - generic [ref=f3e412]: Age
+                  - generic [ref=f3e413]: age · integer
+                - generic [ref=f3e414]: full
+                - button [ref=f3e539]: ✕
+              - generic [ref=f3e417] [cursor=pointer]:
+                - generic [ref=f3e418]:
+                  - button [ref=f3e540]: ▲
+                  - button [ref=f3e541]: ▼
+                - generic [ref=f3e424]:
+                  - generic [ref=f3e425]: Email Address*
+                  - generic [ref=f3e426]: email · email
+                - generic [ref=f3e427]: full
+                - button [ref=f3e542]: ✕
+              - generic [ref=f3e430] [cursor=pointer]:
+                - generic [ref=f3e431]:
+                  - button [ref=f3e543]: ▲
+                  - button [ref=f3e544]: ▼
+                - generic [ref=f3e437]:
+                  - generic [ref=f3e438]: Account Type*
+                  - generic [ref=f3e439]: account_type · enum
+                - generic [ref=f3e440]: full
+                - button [ref=f3e545]: ✕
+              - generic [ref=f3e443] [cursor=pointer]:
+                - generic [ref=f3e444]:
+                  - button [ref=f3e546]: ▲
+                  - button [disabled] [ref=f3e547]: ▼
+                - generic [ref=f3e450]:
+                  - generic [ref=f3e451]: Installation Date
+                  - generic [ref=f3e452]: installation_date · date
+                - generic [ref=f3e453]: full
+                - button [ref=f3e548]: ✕
+          - generic [ref=f3e457]: Select a field to configure
+  - dialog [ref=f3e551]:
+    - banner [ref=f3e552]:
+      - heading "Version History — Test Customer Form" [level=2] [ref=f3e554]
+      - button "Close" [ref=f3e555] [cursor=pointer]
+    - generic [ref=f3e561]:
+      - button "v1 current 14 Oct 2026, 11:36 Initial seeded version for Phase 2 unit tests 5 fields" [active] [ref=f3e563] [cursor=pointer]:
+        - generic [ref=f3e564]:
+          - generic [ref=f3e565]: v1
+          - generic [ref=f3e566]: current
+        - generic [ref=f3e567]: 14 Oct 2026, 11:36
+        - generic [ref=f3e568]: Initial seeded version for Phase 2 unit tests
+        - generic [ref=f3e569]: 5 fields
+      - generic [ref=f3e573]:
+        - generic [ref=f3e574]:
+          - generic [ref=f3e575]: Version 1 — Immutable Snapshot
+          - generic [ref=f3e576]:
+            - generic [ref=f3e577]: "Published: 14 Oct 2026, 11:36"
+            - generic [ref=f3e578]: 5 fields
+          - generic [ref=f3e579]: Initial seeded version for Phase 2 unit tests
+        - generic [ref=f3e584]:
+          - generic [ref=f3e585]: Full Name*
+          - generic [ref=f3e586]: full_name · string
+        - generic [ref=f3e593]:
+          - generic [ref=f3e594]: Age
+          - generic [ref=f3e595]: age · integer
+        - generic [ref=f3e602]:
+          - generic [ref=f3e603]: Email Address*
+          - generic [ref=f3e604]: email · email
+        - generic [ref=f3e611]:
+          - generic [ref=f3e612]: Account Type*
+          - generic [ref=f3e613]: account_type · enum
+        - generic [ref=f3e620]:
+          - generic [ref=f3e621]: Installation Date
+          - generic [ref=f3e622]: installation_date · date

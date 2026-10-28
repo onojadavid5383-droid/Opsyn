@@ -1,0 +1,10 @@
+/* OPSYN — Alarms & outages (list + detail) */
+
+
+.incident { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.title { font-weight: var(--weight-medium); overflow-wrap: anywhere; }
+.ref { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-secondary); }
+.muted { color: var(--text-secondary); }
+.slaCritical { color: var(--status-critical-fg); font-weight: var(--weight-medium); }
+.slaHigh { color: var(--status-high-fg); font-weight: var(--weight-medium); }
+.actions { display: inline-flex; gap: var(--space-2); }

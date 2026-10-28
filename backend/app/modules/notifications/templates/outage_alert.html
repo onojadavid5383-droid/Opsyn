@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>🔴 Critical Outage Alert — Opsyn</title>
+<style>
+  body{background:#050810;font-family:'Segoe UI',sans-serif;color:#e2e8f6;margin:0}
+  .wrap{max-width:520px;margin:40px auto;padding:0 20px}
+  .card{background:#080c18;border-radius:16px;border:1px solid rgba(248,113,113,.3);overflow:hidden}
+  .head{padding:24px 32px;background:linear-gradient(135deg,rgba(248,113,113,.12),rgba(248,113,113,.04));
+        border-bottom:1px solid rgba(248,113,113,.2);text-align:center}
+  .brand{font-size:18px;font-weight:800;background:linear-gradient(135deg,#4ade80,#06b6d4);
+         -webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .alert-badge{display:inline-block;margin-top:8px;padding:5px 14px;border-radius:20px;
+               background:rgba(248,113,113,.15);color:#f87171;font-size:12px;font-weight:700;
+               letter-spacing:.08em;border:1px solid rgba(248,113,113,.3)}
+  .body{padding:28px 32px}
+  .title{font-size:18px;font-weight:700;color:#f87171;margin-bottom:12px}
+  .msg{font-size:13px;color:#8b97b0;line-height:1.7}
+  .msg strong{color:#e2e8f6}
+  .detail-box{background:#0c1220;border-radius:10px;padding:16px 20px;margin:20px 0;
+              border-left:4px solid #f87171}
+  .detail-title{font-size:14px;font-weight:700;color:#e2e8f6;margin-bottom:8px}
+  .detail-sub{font-size:12px;color:#8b97b0}
+  .sev{display:inline-block;padding:3px 10px;border-radius:5px;font-size:11px;font-weight:700;
+       background:rgba(248,113,113,.15);color:#f87171}
+  .foot{background:#0c1220;padding:14px;text-align:center;border-top:1px solid rgba(255,255,255,.06)}
+  .foot-t{font-size:10px;color:#2d3750;letter-spacing:.08em}
+</style>
+</head>
+<body>
+<div class="wrap"><div class="card">
+  <div class="head">
+    <div class="brand">Opsyn</div>
+    <div class="alert-badge">🔴 CRITICAL OUTAGE</div>
+  </div>
+  <div class="body">
+    <div class="title">Network outage detected</div>
+    <div class="msg">
+      A <strong>{{ severity }}</strong> network outage has been logged in Opsyn.
+      Immediate attention is required. Log in to the Outage Monitor to manage the incident.
+    </div>
+    <div class="detail-box">
+      <div class="detail-title">{{ title }}</div>
+      <div class="detail-sub">{{ description }}</div>
+      <div style="margin-top:10px"><span class="sev">{{ severity|upper }}</span></div>
+    </div>
+    <div class="msg">
+      Log in to <strong>Opsyn</strong> to assign engineers, update status, and track resolution.
+    </div>
+  </div>
+  <div class="foot"><div class="foot-t">OPSYN · POWERED BY SLIMTECH · OPERATIONAL INTELLIGENCE PLATFORM</div></div>
+</div></div>
+</body>
+</html>

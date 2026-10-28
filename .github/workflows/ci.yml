@@ -1,0 +1,254 @@
+# ============================================================
+# OPSYN CI/CD PIPELINE — .github/workflows/ci.yml
+# Lint → Test → Build → Deploy
+# Triggered on push to main and pull requests
+# Powered by SlimTech
+# ============================================================
+
+name: Opsyn CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_BACKEND:  ghcr.io/${{ github.repository }}/opsyn-backend
+  IMAGE_FRONTEND: ghcr.io/${{ github.repository }}/opsyn-frontend
+
+jobs:
+  # ══════════════════════════════════════════════════════════
+  # JOB 1: Backend lint + type-check + test
+  # ══════════════════════════════════════════════════════════
+  backend:
+    name: Backend — Lint, Typecheck, Test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB:       opsyn_test
+          POSTGRES_USER:     opsyn
+          POSTGRES_PASSWORD: opsyn_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      # Install from requirements.txt -- the same file
+      # infrastructure/docker/Dockerfile.backend installs from -- so CI
+      # exercises the dependency set that actually ships. There is no
+      # poetry.lock in this repo, so `poetry install` would have resolved
+      # fresh versions on every run and tested something production never
+      # sees. requirements.txt already carries the dev/test tools
+      # (pytest, pytest-asyncio, factory-boy, httpx, ruff, mypy).
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Lint with ruff
+        run: ruff check app/ --output-format=github
+
+      - name: Type-check with mypy
+        run: mypy app/ --ignore-missing-imports --no-error-summary
+        continue-on-error: true  # Informational until full typing is done
+
+      - name: Run Alembic migrations (test DB)
+        run: alembic upgrade head
+        env:
+          DATABASE_URL: postgresql+asyncpg://opsyn:opsyn_test@localhost:5432/opsyn_test
+
+      - name: Run unit tests
+        run: pytest tests/unit/ -v --tb=short --no-header
+        env:
+          DATABASE_URL: postgresql+asyncpg://opsyn:opsyn_test@localhost:5432/opsyn_test
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: ci-test-secret-key-minimum-32-characters-long
+          ENVIRONMENT: testing
+
+      - name: Run integration tests
+        run: pytest tests/integration/ -v --tb=short --no-header
+        env:
+          DATABASE_URL: postgresql+asyncpg://opsyn:opsyn_test@localhost:5432/opsyn_test
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: ci-test-secret-key-minimum-32-characters-long
+          ENVIRONMENT: testing
+
+      - name: Run E2E tests
+        run: pytest tests/e2e/ -v --tb=short --no-header
+        env:
+          DATABASE_URL: postgresql+asyncpg://opsyn:opsyn_test@localhost:5432/opsyn_test
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: ci-test-secret-key-minimum-32-characters-long
+          ENVIRONMENT: testing
+
+  # ══════════════════════════════════════════════════════════
+  # JOB 2: Frontend lint + type-check + test + build
+  # ══════════════════════════════════════════════════════════
+  frontend:
+    name: Frontend — Lint, Typecheck, Test, Build
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Lint with ESLint
+        run: npm run lint
+
+      - name: Type-check with tsc
+        run: npm run typecheck
+
+      - name: Run Vitest
+        run: npm run test
+
+      - name: Build production bundle
+        run: npm run build
+        env:
+          VITE_API_BASE_URL: https://api.opsyn.ng/api/v1
+          VITE_APP_NAME: Opsyn
+
+      - name: Upload build artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+          retention-days: 7
+
+  # ══════════════════════════════════════════════════════════
+  # JOB 3: Build and push Docker images (main branch only)
+  # ══════════════════════════════════════════════════════════
+  docker:
+    name: Docker — Build & Push Images
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./infrastructure/docker/Dockerfile.backend
+          push: true
+          tags: |
+            ${{ env.IMAGE_BACKEND }}:latest
+            ${{ env.IMAGE_BACKEND }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Download frontend dist artefact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+
+      - name: Build & push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./infrastructure/docker/Dockerfile.frontend
+          push: true
+          tags: |
+            ${{ env.IMAGE_FRONTEND }}:latest
+            ${{ env.IMAGE_FRONTEND }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ══════════════════════════════════════════════════════════
+  # JOB 4: Deploy to production (main branch + images built)
+  # ══════════════════════════════════════════════════════════
+  deploy:
+    name: Deploy — Production
+    runs-on: ubuntu-latest
+    needs: [docker]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Railway / Render
+        # Replace this step with your actual deployment command
+        # Examples:
+        #   Railway:  railway deploy --service opsyn-backend
+        #   Render:   curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        #   SSH:      ssh user@host 'cd /opt/opsyn && docker compose pull && docker compose up -d'
+        run: |
+          echo "🚀 Deploying Opsyn v2.0 — Powered by SlimTech"
+          echo "Backend image: ${{ env.IMAGE_BACKEND }}:${{ github.sha }}"
+          echo "Frontend image: ${{ env.IMAGE_FRONTEND }}:${{ github.sha }}"
+          # Add your deployment command here
+
+      - name: Run smoke test against production
+        run: |
+          sleep 30  # Wait for deploy to settle
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://api.opsyn.ng/health)
+          if [ "$STATUS" != "200" ]; then
+            echo "❌ Smoke test failed — health check returned $STATUS"
+            exit 1
+          fi
+          echo "✅ Production health check passed"
+
+      - name: Notify deployment success
+        if: success()
+        run: |
+          echo "✅ Opsyn deployed successfully — SHA ${{ github.sha }}"

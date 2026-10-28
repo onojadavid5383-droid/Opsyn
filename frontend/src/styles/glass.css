@@ -1,0 +1,210 @@
+/* ============================================================
+   OPSYN GLASS MATERIAL — the CSS half of Liquid Glass.
+   (The refraction half is hooks/useLiquidGlass.ts.)
+
+   Glass means "floating / contextual / elevated". Stable, information-dense
+   surfaces (tables, KPIs, forms, page sections) stay solid.
+
+   Tiers — pick by element, not by taste:
+     .liquid-glass          panel tier  + useLiquidGlass()  modals, task popup,
+                                                             sidebars, inspectors
+     .liquid-glass--modal   frost layer on the panel tier   dialogs
+     .liquid-glass-menu     heavy blur + 90% wash, no refraction
+                                                             every dropdown/popover
+     .liquid-glass-chip     light blur, no refraction       toolbars, map controls,
+                                                             anything repeated
+     .liquid-glass-item     NO surface — hover/active state for rows inside glass
+     .liquid-glass-scrim    dialog backdrop
+     .liquid-glass-backdrop ambient mesh the glass refracts (required, see below)
+
+   Rules (from the liquid-glass skill; each one fails silently):
+     1. Glass needs a backdrop — over a flat fill it reads as a gray box.
+     2. The tint is colourless; hue comes from behind the panel.
+     3. Children of a glass surface paint no background/border of their own.
+     4. Never nest a backdrop-filter inside another — portal it out instead.
+   ============================================================ */
+
+/* Layered: component CSS modules are unlayered and therefore always win over
+   these rules, whatever order the stylesheets load in. Order: tokens.css. */
+@layer glass {
+
+
+
+/* ── Ambient backdrop ──────────────────────────────────────── */
+/* Faint, brand-derived glows fixed to the viewport. Solid panels sit on top
+   untouched; floating glass picks the colour up at its edges. */
+.liquid-glass-backdrop {
+  position: relative;
+  isolation: isolate;
+  background: var(--canvas);
+}
+.liquid-glass-backdrop::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(48rem 36rem at 8% -8%,   var(--glass-mesh-a), transparent 62%),
+    radial-gradient(42rem 34rem at 96% 18%,  var(--glass-mesh-b), transparent 60%),
+    radial-gradient(52rem 40rem at 60% 112%, var(--glass-mesh-c), transparent 62%);
+}
+
+
+/* ── Panel tier ────────────────────────────────────────────── */
+.liquid-glass {
+  position: relative;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  background: linear-gradient(180deg, var(--glass-tint-top), var(--glass-tint-bottom));
+  box-shadow:
+    var(--glass-shadow),
+    inset 0 1px 0 var(--glass-rim-top),
+    inset 0 0 0 1px var(--glass-rim-hairline),
+    inset 0 -1px 0 var(--glass-rim-bottom);
+  /* Fallback where SVG-referenced backdrop filters don't render (non-Chromium).
+     useLiquidGlass() overwrites this with url(#…) where they do. */
+  backdrop-filter: blur(3px) saturate(125%);
+  -webkit-backdrop-filter: blur(3px) saturate(125%);
+  color: var(--text-primary);
+}
+
+/* A panel carrying reading content (sidebar, inspector) floats over dense
+   tables: it needs real frost plus a floor of opacity so its text never sits
+   on legible text underneath. (Checked against the preview's outage table —
+   at 72% with the refraction preset's light blur, rows read through.)
+   The frost here is the non-Chromium fallback; in Chromium the refraction
+   filter supplies it (READING_GLASS in components/glass/refraction.ts). */
+.liquid-glass--solid-read {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 84%, transparent), color-mix(in srgb, var(--surface) 84%, transparent)),
+    linear-gradient(180deg, var(--glass-tint-top), var(--glass-tint-bottom));
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+}
+
+.liquid-glass--hover {
+  transition:
+    background var(--duration-base) var(--ease-emphasis),
+    box-shadow var(--duration-base) var(--ease-emphasis);
+}
+.liquid-glass--hover:hover {
+  background: linear-gradient(180deg, var(--glass-tint-top-hover), var(--glass-tint-bottom-hover));
+}
+
+/* Modal tier — frost over the tint, so long-form text stays readable */
+.liquid-glass--modal {
+  border-radius: var(--radius-2xl);
+  background:
+    linear-gradient(180deg, var(--glass-modal-tint), var(--glass-modal-tint)),
+    linear-gradient(180deg, var(--glass-tint-top), var(--glass-tint-bottom));
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+}
+
+/* No backdrop-filter and no opacity animation here, deliberately: the dialog
+   panel is this element's child, and an ancestor with backdrop-filter or
+   opacity < 1 becomes the panel's "backdrop root" — the panel would then
+   refract only the flat scrim colour instead of the page. Fade the colour. */
+.liquid-glass-scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--glass-scrim);
+}
+
+
+/* ── Menu tier — dropdowns, popovers, listboxes, context menus ─ */
+.liquid-glass-menu {
+  background: color-mix(in srgb, var(--glass-menu-surface) var(--glass-menu-wash), transparent);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-menu-shadow), inset 0 1px 0 var(--glass-rim-top);
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  color: var(--text-primary);
+}
+
+
+/* ── Chip tier — small or repeated floating controls ───────── */
+.liquid-glass-chip {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 70%, transparent), color-mix(in srgb, var(--surface) 70%, transparent)),
+    linear-gradient(180deg, var(--glass-tint-top), var(--glass-tint-bottom));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--elevation-2), inset 0 1px 0 var(--glass-rim-top);
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  color: var(--text-primary);
+}
+
+
+/* ── Rows/items inside any glass surface ───────────────────── */
+/* No background of their own at rest (rule 3) — state only. */
+.liquid-glass-item {
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  transition: background var(--duration-fast) var(--ease-standard);
+}
+.liquid-glass-item:hover,
+.liquid-glass-item[data-active='true'] {
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+}
+.liquid-glass-item[aria-selected='true'],
+.liquid-glass-item[aria-current='page'],
+.liquid-glass-item[aria-current='true'] {
+  background: var(--surface-selected);
+}
+
+
+/* ── Fallbacks ──────────────────────────────────────────────── */
+/* !important is deliberate here and only here: a user setting must beat any
+   component's styling. Inside a cascade layer, !important outranks every
+   unlayered (component) rule — the inverse of normal declarations. */
+
+/* No backdrop-filter at all: glass would be a see-through box over content,
+   so become a solid surface instead. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .liquid-glass,
+  .liquid-glass-chip { background: var(--surface) !important; }
+  .liquid-glass-menu { background: var(--glass-menu-surface) !important; }
+  .liquid-glass--modal { background: var(--surface) !important; }
+}
+
+/* The user asked for less transparency: honour it everywhere. */
+@media (prefers-reduced-transparency: reduce) {
+  .liquid-glass,
+  .liquid-glass-chip,
+  .liquid-glass--modal {
+    background: var(--surface) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  .liquid-glass-menu {
+    background: var(--glass-menu-surface) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
+
+/* Windows High Contrast: system colours, visible edges, no effects. */
+@media (forced-colors: active) {
+  .liquid-glass,
+  .liquid-glass-menu,
+  .liquid-glass-chip {
+    background: Canvas !important;
+    color: CanvasText !important;
+    border: 1px solid CanvasText !important;
+    backdrop-filter: none !important;
+    box-shadow: none !important;
+  }
+  .liquid-glass-item[aria-selected='true'],
+  .liquid-glass-item[aria-current='page'],
+  .liquid-glass-item[data-active='true'] {
+    background: Highlight !important;
+    color: HighlightText !important;
+  }
+}
+
+} /* end @layer glass */

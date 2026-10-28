@@ -1,0 +1,75 @@
+# ============================================================
+# OPSYN DOCKER COMPOSE — Production Overrides
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Prerequisites:
+#   1. Set env vars in .env (copy from .env.example)
+#   2. Mount TLS certs at ./ssl/opsyn.crt and ./ssl/opsyn.key
+#      (or use Let's Encrypt — see infrastructure/nginx/nginx.conf)
+#   3. Set DATABASE_URL and REDIS_URL to your managed services
+# ============================================================
+
+services:
+  # ── Alembic migrations ──────────────────────────────────────
+  migrate:
+    image: ghcr.io/slimtech/opsyn/opsyn-backend:latest
+    volumes: []
+    environment:
+      ENVIRONMENT: "production"
+
+  # ── Nginx reverse proxy (HTTPS + rate limiting) ────────────
+  nginx:
+    image: nginx:alpine
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infrastructure/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - frontend_dist:/usr/share/nginx/html:ro
+    depends_on:
+      - backend
+      - frontend
+
+  backend:
+    image: ghcr.io/slimtech/opsyn/opsyn-backend:latest
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
+    environment:
+      ENVIRONMENT: "production"
+      DEBUG: "false"
+    restart: always
+    volumes: []
+    # Do NOT expose port 8000 externally — Nginx proxies it
+    ports: []
+
+  celery:
+    image: ghcr.io/slimtech/opsyn/opsyn-backend:latest
+    command: celery -A app.core.celery_app worker --loglevel=warning --concurrency=4
+    restart: always
+    volumes: []
+
+  celery-beat:
+    image: ghcr.io/slimtech/opsyn/opsyn-backend:latest
+    command: celery -A app.core.celery_app beat --loglevel=warning --schedule=/tmp/celerybeat-schedule
+    restart: always
+    volumes: []
+
+  frontend:
+    image: ghcr.io/slimtech/opsyn/opsyn-frontend:latest
+    restart: always
+    volumes:
+      - frontend_dist:/usr/share/nginx/html
+
+  # Disable dev-only services in production
+  postgres:
+    profiles:
+      - dev-only
+
+  redis:
+    profiles:
+      - dev-only
+
+volumes:
+  frontend_dist:

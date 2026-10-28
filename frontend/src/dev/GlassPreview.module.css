@@ -1,0 +1,216 @@
+/* DEV ONLY — layout for the glass preview page. */
+
+.page {
+  height: 100vh;
+  overflow: auto;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  grid-template-columns: minmax(0, 1fr);  /* wide tables scroll, never widen the page */
+}
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-6);
+  background: var(--chrome);
+  color: var(--chrome-text);
+}
+.bar h1 { font-size: var(--text-lg); font-weight: var(--weight-semibold); }
+.bar p { flex: 1; min-width: 200px; font-size: var(--text-sm); color: var(--chrome-text-muted); }
+.barBtn {
+  height: var(--control-md);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--chrome-border);
+  border-radius: var(--radius-sm);
+  background: var(--chrome-raised);
+  color: var(--chrome-text);
+  cursor: pointer;
+}
+.barBtn:hover { border-color: var(--chrome-text-muted); }
+
+/* The workspace: a solid, dense table so glass is judged over the busiest backdrop */
+/* Docked panels reserve their space (the shell will do the same in Phase 3);
+   the map controls deliberately float over the table body to test glass. */
+.stage {
+  position: relative;
+  padding: var(--space-6) 332px var(--space-6) 316px;
+  min-height: 0;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+}
+.panelHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: 48px;
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+.panelHead h2 { flex: 1; font-size: var(--text-md); font-weight: var(--weight-semibold); }
+.count { color: var(--text-muted); font-weight: var(--weight-regular); }
+
+.table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+.table th {
+  height: 36px;
+  padding: 0 var(--space-3);
+  background: var(--surface-sunken);
+  color: var(--text-secondary);
+  font-weight: var(--weight-medium);
+  text-align: left;
+  white-space: nowrap;
+}
+.table td {
+  height: 40px;
+  padding: 0 var(--space-3);
+  border-top: 1px solid var(--border);
+  white-space: nowrap;
+}
+.table tbody tr:hover { background: var(--surface-hover); }
+.mono { font-family: var(--font-mono); font-size: var(--text-xs); }
+.num { text-align: right; }
+
+.sev {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: var(--weight-medium);
+}
+.sev svg { flex-shrink: 0; }
+.critical { color: var(--status-critical-fg); }
+.high     { color: var(--status-high-fg); }
+.warning  { color: var(--status-warning-fg); }
+.low      { color: var(--status-low-fg); }
+
+.rowMenu {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.rowMenu:hover { background: var(--surface-hover); color: var(--text-primary); }
+
+.filterBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--control-md);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+/* Floating controls */
+.mapControls { position: absolute; right: 360px; top: 200px; }
+.bulkBar {
+  position: fixed;
+  left: 50%;
+  bottom: var(--space-6);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-left: var(--space-4);
+}
+.bulkBar strong { font-size: var(--text-sm); font-weight: var(--weight-semibold); }
+
+/* Sidebar nav items (inset — no surface of their own) */
+.navGroup { margin-bottom: var(--space-4); }
+.navGroupLabel {
+  padding: 0 var(--space-3) var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  height: 36px;
+  padding: 0 var(--space-3);
+  font-size: var(--text-md);
+  text-align: left;
+  cursor: pointer;
+}
+.navItem[aria-current='page'] { font-weight: var(--weight-semibold); color: var(--accent-text); }
+.badge {
+  margin-left: auto;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-full);
+  background: var(--status-critical-fill);
+  color: var(--status-critical-on-fill);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  text-align: center;
+  line-height: 18px;
+}
+
+/* Inspector content */
+.kv { display: grid; grid-template-columns: auto 1fr; gap: var(--space-2) var(--space-4); font-size: var(--text-sm); }
+.kv dt { color: var(--text-secondary); }
+.kv dd { font-weight: var(--weight-medium); }
+.meter { height: 6px; margin-top: var(--space-1); border-radius: var(--radius-full); background: var(--surface-strong); overflow: hidden; }
+.meter span { display: block; height: 100%; background: var(--status-high-fill); }
+.inspectorSection { margin-top: var(--space-4); }
+.inspectorSection h3 { margin-bottom: var(--space-2); font-size: var(--text-sm); font-weight: var(--weight-semibold); }
+
+/* Task popup content (a preview of the Phase 7 layout direction) */
+.ticket {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--brand-tint);
+  color: var(--accent-text);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+}
+.taskGrid { display: grid; grid-template-columns: 1fr 300px; gap: var(--space-6); }
+.taskMain p { color: var(--text-secondary); margin-bottom: var(--space-4); }
+.timeline { list-style: none; border-left: 2px solid var(--glass-border); padding-left: var(--space-4); }
+.timeline li { position: relative; margin-bottom: var(--space-4); font-size: var(--text-sm); }
+.timeline li::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--space-4) * -1 - 6px);
+  top: 5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--state-progress);
+}
+.timeline time { display: block; color: var(--text-muted); font-size: var(--text-xs); }
+.footerBtn {
+  height: var(--control-lg);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-input);
+  background: var(--surface);
+  cursor: pointer;
+  font-weight: var(--weight-medium);
+}
+.primary {
+  border-color: transparent;
+  background: var(--brand);
+  color: var(--brand-contrast);
+}
+.primary:hover { background: var(--brand-hover); }
+
+@media (max-width: 1100px) {
+  .stage { padding-left: var(--space-6); }
+  .taskGrid { grid-template-columns: 1fr; }
+}

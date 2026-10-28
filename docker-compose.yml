@@ -1,0 +1,169 @@
+# ============================================================
+# OPSYN DOCKER COMPOSE — Full dev stack
+# 5 services: postgres · redis · backend · celery · frontend
+#
+# FIXED:
+#   - depends_on uses block syntax (not inline {}) for compatibility
+#   - build context paths corrected to ./backend and ./frontend
+#   - ALLOWED_ORIGINS_STR matches the Settings field name
+#   - Works on Docker Desktop 4.x Windows/Mac/Linux + WSL2
+#
+# Usage: docker compose up --build
+# ============================================================
+
+services:
+
+  # ── PostgreSQL 16 + PostGIS 3.4 ───────────────────────────
+  # IMPORTANT: postgis/postgis image required for geometry(Point,4326) columns
+  # used by the Infrastructure Management module (migrations 0069–0071).
+  postgres:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       opsyn
+      POSTGRES_USER:     opsyn
+      POSTGRES_PASSWORD: opsyn_dev_pass
+    volumes:
+      - opsyn_pg_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opsyn"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ── Redis 7 ────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Alembic migrations ──────────────────────────────────────
+  # One-shot: runs `alembic upgrade head` and exits. backend/celery/
+  # celery-beat all wait on this completing successfully instead of
+  # each racing to run migrations themselves on startup — without
+  # this, a fresh postgres volume has none of the app's tables and
+  # every DB query fails with UndefinedTableError.
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: ../infrastructure/docker/Dockerfile.backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://opsyn:opsyn_dev_pass@postgres:5432/opsyn"
+      SECRET_KEY:   "dev-secret-key-change-in-production-minimum-32-chars!!"
+    volumes:
+      - ./backend:/app
+    command: alembic upgrade head
+
+  # ── FastAPI Backend ────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: ../infrastructure/docker/Dockerfile.backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL:        "postgresql+asyncpg://opsyn:opsyn_dev_pass@postgres:5432/opsyn"
+      REDIS_URL:           "redis://redis:6379/0"
+      CELERY_BROKER_URL:   "redis://redis:6379/1"
+      SECRET_KEY:          "dev-secret-key-change-in-production-minimum-32-chars!!"
+      ENVIRONMENT:         "development"
+      FRONTEND_URL:        "http://localhost:5173"
+      ALLOWED_ORIGINS_STR: "http://localhost:5173"
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  # ── Celery Worker ──────────────────────────────────────────
+  celery:
+    build:
+      context: ./backend
+      dockerfile: ../infrastructure/docker/Dockerfile.backend
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL:      "postgresql+asyncpg://opsyn:opsyn_dev_pass@postgres:5432/opsyn"
+      REDIS_URL:         "redis://redis:6379/0"
+      CELERY_BROKER_URL: "redis://redis:6379/1"
+      SECRET_KEY:        "dev-secret-key-change-in-production-minimum-32-chars!!"
+    volumes:
+      - ./backend:/app
+    command: celery -A app.core.celery_app worker --pool=solo --loglevel=info
+
+  # ── Celery Beat (periodic task scheduler) ──────────────────
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: ../infrastructure/docker/Dockerfile.backend
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL:      "postgresql+asyncpg://opsyn:opsyn_dev_pass@postgres:5432/opsyn"
+      REDIS_URL:         "redis://redis:6379/0"
+      CELERY_BROKER_URL: "redis://redis:6379/1"
+      SECRET_KEY:        "dev-secret-key-change-in-production-minimum-32-chars!!"
+    volumes:
+      - ./backend:/app
+    command: celery -A app.core.celery_app beat --loglevel=info --schedule=/tmp/celerybeat-schedule
+
+  # ── React Frontend ─────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ../infrastructure/docker/Dockerfile.frontend
+      target: dev
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      # Keep API calls on the same hostname the browser used for the frontend.
+      # This also makes LAN and Cloudflare tunnel access work without pointing
+      # the browser at its own localhost.
+      VITE_API_BASE_URL: "/api/v1"
+      VITE_API_PROXY_TARGET: "http://backend:8000"
+      VITE_APP_NAME:     "Opsyn"
+      # Windows/macOS bind mounts don't forward file-change events into the
+      # container, so Vite never saw edits. Poll instead.
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL:   "300"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    command: npm run dev -- --host 0.0.0.0
+
+volumes:
+  opsyn_pg_data:

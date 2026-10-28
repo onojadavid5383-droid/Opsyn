@@ -1,0 +1,102 @@
+/* GlassDrawer — secondary sidebar (left) and inspector (right).
+   Panel tier + refraction, with a reading floor so text never depends on
+   what scrolls underneath. */
+
+.drawer {
+  position: absolute;
+  top: var(--drawer-inset, var(--space-2));
+  bottom: var(--drawer-inset, var(--space-2));
+  z-index: var(--z-drawer);
+  display: flex;
+  flex-direction: column;
+  width: var(--drawer-w, 280px);
+  max-width: calc(100% - var(--space-4));
+  overflow: hidden;
+  transition:
+    transform var(--duration-slow) var(--ease-emphasis),
+    opacity var(--duration-base) var(--ease-standard);
+}
+.left  { left:  var(--drawer-inset, var(--space-2)); }
+.right { right: var(--drawer-inset, var(--space-2)); }
+
+/* Slide on the glass element itself (never on an ancestor) */
+.left[data-status='initial'],  .left[data-status='close']  { transform: translateX(-16px); opacity: 0; }
+.right[data-status='initial'], .right[data-status='close'] { transform: translateX(16px);  opacity: 0; }
+
+/* Modal mode: fixed to the viewport, in #overlay-root, over a scrim */
+.modalScrim {
+  z-index: var(--z-modal);
+  transition: background-color var(--duration-base) var(--ease-standard);
+}
+.modalScrim[data-status='initial'],
+.modalScrim[data-status='close'] { background-color: transparent; }
+.modal {
+  position: fixed;
+  top: var(--space-2);
+  bottom: var(--space-2);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-4) var(--space-3);
+  border-bottom: 1px solid var(--glass-border);
+}
+.headings { flex: 1; min-width: 0; }
+.title {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+}
+.subtitle {
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+.actions { display: flex; gap: var(--space-1); }
+.close {
+  display: grid;
+  place-items: center;
+  width: var(--control-md);
+  height: var(--control-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.close:hover { color: var(--text-primary); }
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-3);
+}
+
+/* Phones: the inspector becomes a bottom sheet over the map/list */
+@media (max-width: 767px) {
+  .sheet {
+    position: fixed;
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    max-width: none;
+    max-height: 70vh;
+    border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .sheet[data-status='initial'],
+  .sheet[data-status='close'] { transform: translateY(24px); opacity: 0; }
+  .sheet .header::before {
+    content: '';
+    position: absolute;
+    top: 6px;
+    left: 50%;
+    width: 36px;
+    height: 4px;
+    margin-left: -18px;
+    border-radius: var(--radius-full);
+    background: var(--border-strong);
+  }
+}

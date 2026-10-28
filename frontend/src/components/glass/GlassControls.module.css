@@ -1,0 +1,94 @@
+/* GlassButton + GlassToolbar — floating controls (map controls, bulk-action
+   bar, contextual toolbars, FAB). Chip tier: no refraction, except the FAB. */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: var(--control-md);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-full);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-standard);
+}
+.button:active:not(:disabled) { transform: scale(0.97); }
+.button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.sm { height: var(--control-sm); padding: 0 var(--space-2); font-size: var(--text-xs); }
+.lg { height: var(--control-lg); padding: 0 var(--space-4); font-size: var(--text-md); }
+
+.icon { width: var(--control-md); padding: 0; }
+.icon.sm { width: var(--control-sm); }
+.icon.lg { width: var(--control-lg); }
+
+/* Glass variant hover: sheen lift, not a colour swap */
+.glass:hover:not(:disabled) {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 88%, transparent), color-mix(in srgb, var(--surface) 88%, transparent));
+}
+.glass[aria-pressed='true'] {
+  background: var(--surface-selected);
+  color: var(--accent-text);
+}
+
+/* Brand: coloured glass — override the tint only; rim restated (recipe) */
+.brand {
+  background: color-mix(in srgb, var(--brand) 88%, transparent);
+  border: 1px solid color-mix(in srgb, var(--brand) 60%, transparent);
+  color: var(--brand-contrast);
+  box-shadow:
+    0 8px 20px color-mix(in srgb, var(--brand) 30%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+.brand:hover:not(:disabled) { background: var(--brand-hover); }
+
+/* FAB: circular, panel tier (refracts — one per screen at most) */
+.fab {
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+/* ── Toolbar ── */
+.toolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: var(--space-1);
+  border-radius: var(--radius-full);
+}
+.toolbar[aria-orientation='vertical'] {
+  flex-direction: column;
+  border-radius: var(--radius-xl);
+}
+/* Buttons inside a toolbar share its glass — no surface of their own (rule 3) */
+.toolbar .button {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.toolbar .button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+.toolbar .button[aria-pressed='true'] { background: var(--surface-selected); }
+.divider {
+  align-self: stretch;
+  width: 1px;
+  margin: var(--space-1) 2px;
+  background: var(--glass-border);
+}
+.toolbar[aria-orientation='vertical'] .divider { width: auto; height: 1px; margin: 2px var(--space-1); }
+
+@media (pointer: coarse) {
+  .button, .icon { min-height: var(--touch-min); min-width: var(--touch-min); }
+}

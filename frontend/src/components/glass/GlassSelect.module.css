@@ -1,0 +1,66 @@
+/* GlassSelect — the field is a solid workbench control; only the open
+   listbox is glass (menu tier). */
+
+.field { margin-bottom: var(--space-4); }
+.field[data-inline='true'] { margin-bottom: 0; }
+
+.label {
+  display: block;
+  margin-bottom: var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-primary);
+}
+.required { margin-left: 2px; color: var(--text-secondary); }
+
+.trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  height: var(--control-lg);
+  padding: 0 var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--text-md);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-standard),
+              box-shadow var(--duration-fast) var(--ease-standard);
+}
+.trigger:hover:not(:disabled) { border-color: var(--text-secondary); }
+.trigger:focus-visible {
+  outline: none;
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 1px var(--focus-ring);
+}
+.trigger[aria-expanded='true'] { border-color: var(--focus-ring); }
+.trigger[aria-invalid='true'] { border-color: var(--status-critical-fg); }
+.trigger:disabled {
+  background: var(--surface-sunken);
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+.compact { height: var(--control-md); font-size: var(--text-sm); }
+
+.value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.placeholder { color: var(--text-muted); }
+.chevron {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  transition: transform var(--duration-base) var(--ease-emphasis);
+}
+.trigger[aria-expanded='true'] .chevron { transform: rotate(180deg); }
+
+.message {
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+.error { color: var(--status-critical-fg); }
+
+@media (pointer: coarse) {
+  .trigger, .compact { min-height: var(--touch-min); }
+}

@@ -1,0 +1,84 @@
+- generic [ref=f2e3]:
+  - link "Skip to content" [ref=f2e4] [cursor=pointer]:
+    - /url: "#main"
+  - banner [ref=f2e5]:
+    - button "Open navigation" [ref=f2e6] [cursor=pointer]
+    - navigation "Breadcrumb" [ref=f2e8]:
+      - list [ref=f2e9]:
+        - listitem [ref=f2e10]:
+          - generic [ref=f2e11]: Preview
+    - button "Search pages and commands" [ref=f2e12] [cursor=pointer]
+    - button "Notifications" [ref=f2e16] [cursor=pointer]
+    - 'button "Account: david.onoja" [ref=f2e20] [cursor=pointer]':
+      - generic [aria-hidden] [ref=f2e21]: DA
+  - region "Network health" [ref=f2e22]:
+    - link "0 critical outages open" [ref=f2e23] [cursor=pointer]:
+      - /url: /outage?severity=critical
+      - generic [ref=f2e27]: "0"
+      - generic [ref=f2e28]: Critical
+    - link "0 high outages open" [ref=f2e29] [cursor=pointer]:
+      - /url: /outage?severity=high
+      - generic [ref=f2e33]: "0"
+      - generic [ref=f2e34]: High
+    - link "0 warning outages open" [ref=f2e35] [cursor=pointer]:
+      - /url: /outage?severity=warning
+      - generic [ref=f2e39]: "0"
+      - generic [ref=f2e40]: Warning
+    - link "0 low outages open" [ref=f2e41] [cursor=pointer]:
+      - /url: /outage?severity=low
+      - generic [ref=f2e45]: "0"
+      - generic [ref=f2e46]: Low
+    - link "0 SLA at risk" [ref=f2e90] [cursor=pointer]:
+      - /url: /outage?view=sla
+      - generic [ref=f2e52]: "0"
+      - generic [ref=f2e53]: SLA at risk
+    - link "2 On call" [ref=f2e91] [cursor=pointer]:
+      - /url: /shifts
+      - generic [ref=f2e60]: "2"
+      - generic [ref=f2e61]: On call
+    - generic [ref=f2e62]: Updated 14:31
+  - main [ref=f2e65]:
+    - generic [ref=f2e92]:
+      - generic [ref=f2e93]:
+        - button "← Builder" [ref=f2e94] [cursor=pointer]
+        - generic [ref=f2e95]: Preview & Test
+        - button "View Submissions →" [ref=f2e96] [cursor=pointer]
+      - generic [ref=f2e98]:
+        - generic [ref=f2e100]:
+          - generic [ref=f2e101]:
+            - generic [ref=f2e102]: Test Customer Form
+            - generic [ref=f2e103]: Seeded by migration 0082 for Phase 2 unit tests
+          - generic [ref=f2e104]:
+            - generic [ref=f2e105]:
+              - generic [ref=f2e106]: Full Name*
+              - textbox [ref=f2e107]
+            - generic [ref=f2e108]:
+              - generic [ref=f2e109]: Age
+              - spinbutton [ref=f2e110]
+            - generic [ref=f2e111]:
+              - generic [ref=f2e112]: Email Address*
+              - textbox "user@example.com" [ref=f2e113]: not-an-email
+              - generic [ref=f2e130]: Must be a valid email address.
+            - generic [ref=f2e114]:
+              - generic [ref=f2e115]: Account Type*
+              - combobox "Account Type" [ref=f2e117] [cursor=pointer]:
+                - generic [ref=f2e118]: — Select —
+            - generic [ref=f2e121]:
+              - generic [ref=f2e122]: Installation Date
+              - textbox [ref=f2e123]
+          - generic [ref=f2e124]:
+            - button "Validate" [ref=f2e125] [cursor=pointer]
+            - button "Save Draft" [ref=f2e126] [cursor=pointer]
+            - button "Cancel" [ref=f2e127] [cursor=pointer]
+            - button "Submit" [ref=f2e128] [cursor=pointer]
+        - generic [ref=f2e129]: Preview mode — submissions are real and will appear in the submissions log
+  - navigation "Quick navigation" [ref=f2e68]:
+    - link "Home" [ref=f2e69] [cursor=pointer]:
+      - /url: /dashboard
+    - link "Alarms" [ref=f2e75] [cursor=pointer]:
+      - /url: /outage
+    - link "Map" [ref=f2e81] [cursor=pointer]:
+      - /url: /network
+    - link "Tasks" [ref=f2e84] [cursor=pointer]:
+      - /url: /tasks
+    - button "Menu" [ref=f2e88] [cursor=pointer]

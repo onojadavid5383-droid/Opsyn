@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Your Opsyn role has been updated</title>
+<style>
+  body { background:#050810; font-family:'Segoe UI',sans-serif; color:#e2e8f6; margin:0; }
+  .wrap { max-width:520px; margin:40px auto; padding:0 20px; }
+  .card { background:#080c18; border-radius:16px; border:1px solid rgba(255,255,255,.09); overflow:hidden; }
+  .head { padding:28px 32px; background:#0c1220; border-bottom:1px solid rgba(6,182,212,.2); text-align:center; }
+  .brand { font-size:18px; font-weight:800; background:linear-gradient(135deg,#4ade80,#06b6d4); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .body { padding:28px 32px; }
+  .title { font-size:18px; font-weight:700; color:#e2e8f6; margin-bottom:12px; }
+  .msg { font-size:13px; color:#8b97b0; line-height:1.7; }
+  .msg strong { color:#e2e8f6; }
+  .role-box { background:#0c1220; border-radius:10px; padding:16px 20px; margin:20px 0;
+               border-left:4px solid; border-color:linear-gradient(180deg,#4ade80,#06b6d4); }
+  .role-name { font-size:15px; font-weight:700; background:linear-gradient(135deg,#4ade80,#06b6d4);
+               -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .foot { background:#0c1220; padding:16px 32px; text-align:center;
+          border-top:1px solid rgba(255,255,255,.06); }
+  .foot-t { font-size:10px; color:#2d3750; letter-spacing:.08em; }
+</style>
+</head>
+<body>
+<div class="wrap"><div class="card">
+  <div class="head"><div class="brand">Opsyn</div></div>
+  <div class="body">
+    <div class="title">Your role has been updated</div>
+    <div class="msg">
+      Your Opsyn role has been changed by an administrator.
+      Your new role is listed below — your access permissions have been updated accordingly.
+    </div>
+    <div class="role-box">
+      <div style="font-size:11px;color:#4a5670;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">New Role</div>
+      <div class="role-name">{{ new_role }}</div>
+    </div>
+    <div class="msg">
+      Log in to <strong>Opsyn</strong> to see your updated access. If you believe this change
+      was made in error, contact your system administrator immediately.
+    </div>
+  </div>
+  <div class="foot"><div class="foot-t">OPSYN · POWERED BY SLIMTECH · OPERATIONAL INTELLIGENCE PLATFORM</div></div>
+</div></div>
+</body>
+</html>

@@ -1,0 +1,402 @@
+OPSYN PLATFORM
+Customer Module & Project Pipeline
+Implementation Plan
+Prepared for: Opsyn Engineering Team
+Version: 1.0  |  Date: May 2026
+Table of Contents
+1. Executive Summary
+This document defines the complete implementation plan for the Opsyn Customer Module and Project Pipeline system — a multi-tenant, event-driven platform that spans customer creation, payment processing, and cross-departmental project routing.
+The plan is derived from two sources:
+The Opsyn Development Log (session date: 2026-05-17), which documents the current architecture, known bugs fixed, data model constraints, and frontend/backend patterns already in production.
+The Customer Creation & Project Pipeline Implementation Prompt, which specifies the full feature scope required.
+Key constraints inherited from the existing codebase:
+User display names are resolved via user.staff_profile.full_name — never user.full_name (which does not exist on the ORM model). Every new query involving actor labels must follow this pattern.
+Router registration order in main.py matters: catch-all /{id}/... routes on tasks_router must be registered after more-specific routers to avoid path shadowing.
+React error boundaries must wrap all modal and detail panel components — the existing ErrorBoundary component created in the last session should be reused.
+Timeline entries everywhere must conform to the TimelineEntry interface: event_type, actor_label (never undefined), body, meta, is_system, created_at.
+All new pipeline stages must handle the case where project.pipeline_template is None, as pipeline_service.py already guards this.
+The implementation is divided into 7 sequential phases. Each phase ends with a mandatory checkpoint before the next begins.
+2. System Architecture Overview
+2.1 Multi-Tenancy Model
+Every database table that stores customer, project, pipeline, or form data must carry a tenant_id column. All API queries must filter by the authenticated user's tenant_id. No cross-tenant data leakage is acceptable at any layer.
+2.2 External Application Integration Points
+Four external applications trigger workflows into the platform:
+External App
+Trigger Method
+Resulting Platform Action
+Field Tech App
+External Task / Webhook
+Create customer record + generate payment request
+HR App
+External Task / Webhook
+Create customer record, initiate pipeline
+Sales App
+External Task / Webhook
+Create customer record, initiate pipeline
+Coverage Checker App
+Redirect to Customer Creation Page
+Customer self-completes form → payment → pipeline
+Finance App
+Webhook on payment confirmation
+Create project pipeline entry from Finance department
+2.3 Core Data Flow
+The canonical happy-path flow for any customer creation is:
+External app or customer submits data → Customer record created with tenant_id.
+System auto-generates payment request/link and dispatches it to the customer.
+Customer completes payment → Finance App fires webhook with payment details.
+Platform creates Project Pipeline entry, seeded with Finance department as origin.
+Finance confirms payment → project advances to next department stage.
+Each department sees its stage, fills in required fields, and approves to advance.
+Project completes when all stages are approved.
+ℹ  Coverage Checker special path: customer fills creation form directly on the platform, then proceeds through the same payment → pipeline flow.
+3. Database Design
+3.1 Design Principles
+All tables include: id (UUID), tenant_id, created_at, updated_at, is_deleted (soft-delete).
+Foreign keys are explicit; ORM relationships use selectinload for async safety — following the existing pattern in router.py.
+No new column named full_name on the User model. Display name resolution always goes through StaffProfile.
+Pipeline stage tables must handle NULL pipeline_template gracefully — matching the guard already in pipeline_service.py.
+3.2 New Tables Required
+Customer Core
+Table
+Key Columns
+Purpose
+customers
+id, tenant_id, status, source_app, created_by
+Master customer record. source_app tracks which external app originated the record.
+customer_form_submissions
+customer_id, form_schema_id, submitted_data (JSONB), submitted_by, stage
+One row per form submission per customer per stage.
+customer_field_values
+customer_id, field_definition_id, value (TEXT), department_id, updated_by
+Flat field value store. One row per field per customer. Supports progressive completion across departments.
+customer_audit_log
+customer_id, actor_id, action, old_value, new_value, tenant_id
+Full audit trail for every field change.
+Dynamic Form Builder
+Table
+Key Columns
+Purpose
+form_schemas
+id, tenant_id, name, version, is_active, department_id
+Versioned form schemas. One active schema per form name per tenant.
+field_definitions
+form_schema_id, key, label, field_type, validation_rules (JSONB), is_required, owner_department_id, visible_from_stage_order, roles_can_edit (ARRAY)
+Each row is one field. visible_from_stage_order controls when the field appears in the pipeline UI.
+field_visibility_rules
+field_definition_id, stage_order, department_id, is_required_to_advance
+Fine-grained stage × department visibility matrix.
+Payment Tracking
+Table
+Key Columns
+Purpose
+payment_requests
+id, customer_id, tenant_id, amount, currency, payment_link, status, expires_at
+Auto-generated on customer creation. Status: pending | paid | expired | refunded.
+payment_confirmations
+payment_request_id, confirmed_by_app, confirmation_payload (JSONB), confirmed_at
+Written by webhook handler when Finance App calls back.
+Project Pipeline Extensions
+Table
+Key Columns
+Purpose
+project_stage_approvals
+project_id, stage_id, approver_id, approved_at, notes
+Tracks manager/team-lead approval per stage before advancement.
+stage_field_completion
+project_id, stage_id, field_definition_id, is_complete
+Cache of required field completion state. Queried by advancement validation.
+external_task_logs
+id, tenant_id, source_app, payload (JSONB), status, error, processed_at
+Immutable log of every inbound external task/webhook call for debugging and replay.
+ℹ  All JSONB columns are indexed with GIN indexes. All tenant_id columns have composite indexes with common query columns (e.g., tenant_id + status).
+4. Implementation Phases
+Seven phases are defined below. Each phase includes: objective, backend steps, frontend steps, validation gates, and approval checkpoint. Work proceeds sequentially — do not start Phase N+1 until Phase N checkpoint is passed.
+PHASE 1  Database Migrations & Seed Data   [Sprint 1 — ~3 days]
+4.1 Phase 1 Objective
+Create all new database tables, run migrations, and seed reference data. No API or UI work in this phase. Goal: stable schema that all subsequent phases build on.
+4.1.1 Backend Steps
+Write Alembic migration scripts for all tables listed in Section 3.2, in dependency order: form_schemas → field_definitions → field_visibility_rules → customers → customer_field_values → customer_form_submissions → payment_requests → payment_confirmations → project_stage_approvals → stage_field_completion → external_task_logs → customer_audit_log.
+Add tenant_id to any existing table that lacks it (audit via schema introspection before writing migration).
+Add GIN indexes on all JSONB columns. Add composite indexes on (tenant_id, status) for customers, payment_requests, and external_task_logs.
+Seed one test tenant with: one form schema, five field definitions covering both text and select types, one payment_request in 'pending' status linked to a mock customer.
+Run migration against a staging database. Confirm rollback script also works cleanly.
+4.1.2 Validation Gates (Phase 1 Checkpoint)
+All migrations run without error on a clean database.
+Rollback brings schema to exact prior state.
+Seed data is queryable; tenant isolation confirmed (query with wrong tenant_id returns zero rows).
+No existing tables have been modified in a breaking way.
+ℹ  Do not proceed to Phase 2 until all Phase 1 validation gates pass and the tech lead has signed off on the schema.
+PHASE 2  Dynamic Form Builder — Backend APIs   [Sprint 1–2 — ~4 days]
+4.2 Phase 2 Objective
+Build the backend APIs that let organization admins define and manage customer form schemas dynamically. No frontend yet — all testing via API client.
+4.2.1 API Endpoints
+Method
+Path
+Description
+GET
+/api/v1/forms/schemas
+List all active form schemas for the tenant.
+POST
+/api/v1/forms/schemas
+Create a new form schema (admin only). Returns schema with version number.
+GET
+/api/v1/forms/schemas/{id}
+Get schema with all field definitions and visibility rules.
+PUT
+/api/v1/forms/schemas/{id}
+Update schema. Creates a new version; old version is archived not deleted.
+POST
+/api/v1/forms/schemas/{id}/fields
+Add a field definition to a schema.
+PUT
+/api/v1/forms/fields/{id}
+Update a field definition including visibility rules.
+DELETE
+/api/v1/forms/fields/{id}
+Soft-delete a field. Cannot delete a field referenced by submitted data.
+GET
+/api/v1/forms/fields/{id}/visibility
+Get stage × department visibility matrix for a field.
+4.2.2 Backend Implementation Steps
+Create forms_router.py with prefix /api/v1/forms. Register in main.py BEFORE the catch-all tasks_router. (This prevents route shadowing — lesson from the development log.)
+Implement FormSchema ORM model with relationship to FieldDefinition and FieldVisibilityRule. Use selectinload for all nested loads.
+Implement validation engine: field_type enum (text, number, email, phone, select, multiselect, date, file, textarea), validation_rules schema (min_length, max_length, regex, min, max, options_list for select types).
+Implement role-based field access: fields carry roles_can_edit list; API returns only fields the authenticated user's role can see/edit.
+Schema versioning: PUT to an active schema creates version N+1 and archives version N. field_definitions linked to old versions remain queryable for historical submissions.
+All writes emit an entry to customer_audit_log with actor resolved via user.staff_profile.full_name — following the established User name resolution pattern.
+4.2.3 Validation Gates (Phase 2 Checkpoint)
+All 9 endpoints return correct data for valid requests.
+Tenant isolation: schemas from Tenant A never appear in Tenant B responses.
+Role enforcement: a non-admin user cannot POST /schemas.
+Soft-delete: deleted fields are not returned in schema GET but are preserved in the DB.
+Schema versioning: updating a schema produces a new version; old version is still queryable.
+PHASE 3  Customer Module — Backend APIs   [Sprint 2 — ~5 days]
+4.3 Phase 3 Objective
+Build all customer management APIs: creation, dynamic data submission per stage, import/export, and webhook handler for external app triggers.
+4.3.1 API Endpoints
+Method
+Path
+Description
+POST
+/api/v1/customers
+Create customer. Triggers payment request generation.
+GET
+/api/v1/customers
+List customers for tenant with filters (status, source_app, date range).
+GET
+/api/v1/customers/{id}
+Get customer with all field values and current pipeline state.
+PATCH
+/api/v1/customers/{id}/fields
+Submit or update field values for a specific stage. Validates required fields for current stage.
+GET
+/api/v1/customers/{id}/fields
+Get field values filtered by requester's department and role visibility.
+POST
+/api/v1/customers/import
+Bulk import via CSV/JSON. Returns import report with row-level errors.
+GET
+/api/v1/customers/export
+Export customers as CSV. Respects role-level field visibility.
+POST
+/api/v1/external/tasks
+Webhook: external app submits customer + task data. Idempotent via external_ref_id.
+POST
+/api/v1/external/payment-confirm
+Webhook: Finance App confirms payment. Triggers pipeline creation.
+4.3.2 Key Implementation Rules
+POST /customers must atomically: insert customer row, insert payment_request row, and write to external_task_logs (if triggered by external app). Use a single DB transaction. On any failure, roll back all three.
+Payment link generation: integrate with configured payment provider (configurable per tenant in a payment_config table). If no provider configured, generate an internal pending link. Never block customer creation on payment provider errors — log and flag, do not raise HTTP 500.
+POST /external/tasks must be idempotent. External apps may retry on network failure. Use external_ref_id as a unique key; duplicate submissions return 200 with the existing record, not an error.
+POST /external/payment-confirm: validate HMAC signature of the webhook payload. On valid payment, call the existing start_pipeline service using the correct argument order: start_pipeline(project_id, template_id, db, current_user) — the argument order bug documented in the development log must not be reintroduced.
+If no pipeline template exists for the department, seed the 5-stage fallback (New → Assigned → In Progress → Review → Done) using the TASK_STAGES seeding logic already established in auto_generator.py.
+Field value writes: validate each submitted value against the field_definition's validation_rules before persisting. Return structured field-level errors, not a generic 422.
+Actor labels in audit logs: always resolve as (user.staff_profile.full_name if user.staff_profile else user.username) if user else 'System'.
+4.3.3 Validation Gates (Phase 3 Checkpoint)
+Customer creation atomicity: if payment_request insert fails, customer row is not persisted.
+Idempotency: sending the same external task twice returns 200 both times; DB has one record.
+HMAC validation: tampered payment-confirm webhooks return 401.
+Field visibility: a GIS department user cannot read Field Technician department fields.
+Export: only fields the user's role can see appear in the export CSV.
+PHASE 4  Project Pipeline — Stage Advancement & Approvals   [Sprint 2–3 — ~4 days]
+4.4 Phase 4 Objective
+Extend the existing pipeline system with stage-based field completion validation, approval gates, and push-back logic. Build on the fixes already in pipeline_service.py and ProjectPipelinePage.tsx.
+4.4.1 Backend Steps
+Extend pipeline_service.py advance_stage function: before advancing, query stage_field_completion for all is_required_to_advance fields at the current stage. If any are incomplete, raise HTTP 422 with a structured list of missing fields. The existing None-template guard must be preserved.
+Add approval gate: if the stage requires approval (configurable per stage in the pipeline template), check project_stage_approvals for an entry with approved_at set. If missing, return HTTP 403 with reason 'Awaiting approval'.
+New endpoint POST /api/v1/projects/{id}/stages/{stage_id}/approve: manager/team-lead role only. Writes to project_stage_approvals. Emits activity log entry using the TimelineEntry format already used by ActivityTimeline.
+New endpoint POST /api/v1/projects/{id}/stages/{stage_id}/push-back: allows reverting to previous stage with a mandatory reason comment. Log to project activity timeline.
+Notification dispatch on stage transition: fetch all department members (users with matching department_id and tenant_id), emit in-app notifications. Use existing notification pattern if present; otherwise create a simple notifications table and dispatch function.
+4.4.2 Frontend Steps
+Extend the ProjectPipelineStepper component (built in the last session) to show: required fields checklist per stage, approval status badge, Approve button (role-gated), Push Back button with required comment modal.
+Stage field checklist: query GET /api/v1/customers/{id}/fields filtered to the current stage. Mark each required field as complete/incomplete. Show inline nudge when fields are missing.
+All pipeline state mutations must be wrapped in the existing ErrorBoundary — reuse the component created in the last session.
+4.4.3 Validation Gates (Phase 4 Checkpoint)
+Advance blocked when required fields are missing: API returns 422 with field list.
+Advance blocked when approval is required but not given: API returns 403.
+Approval by non-manager returns 403.
+Push-back without reason comment returns 422.
+Stage transition fires notification: confirm department members receive notification records.
+PHASE 5  Frontend — Customer Pages & Form Builder UI   [Sprint 3 — ~5 days]
+4.5 Phase 5 Objective
+Build the complete frontend customer management UI: customer list page, customer detail page with progressive field completion, and the admin-facing dynamic Form Builder.
+4.5.1 Customer List Page
+Route: /customers. Data from GET /api/v1/customers. Show: customer name, status badge, source app tag, created date, assigned department, action menu.
+Filters: status, source_app, date range, department. Filters are URL-param driven (shareable links).
+Columns are role-filtered: users without export permissions do not see the Export button.
+Clicking a row opens the Customer Detail page.
+4.5.2 Customer Detail Page
+Route: /customers/:id. Tabbed layout: Overview | Fields | Timeline | Payment | Pipeline.
+Fields tab: renders form fields dynamically from GET /api/v1/customers/{id}/fields. Groups fields by department. Only fields visible at the current pipeline stage (or already completed in past stages) are shown. Each field shows: label, current value, which department owns it, whether it is required for the current stage.
+Editable fields: submit via PATCH /api/v1/customers/{id}/fields. Inline field-level error display matching the structured error response from the backend.
+Timeline tab: reuse the existing ActivityTimeline component. Feed it entries from GET /api/v1/customers/{id}/timeline, formatted as TimelineEntry objects.
+Payment tab: show payment_request status, payment link (copyable), confirmation details if paid.
+Pipeline tab: embed ProjectPipelineStepper from Phase 4.
+Wrap all tabs in ErrorBoundary — reuse the existing component.
+4.5.3 Form Builder UI (Admin Only)
+Route: /settings/forms. List all form schemas for the tenant. Show name, version, field count, last updated.
+Schema editor: drag-and-drop field ordering. Add field panel: select field_type, set label, key, required toggle, validation rules, owner department, visible_from_stage_order, roles_can_edit checkboxes.
+Visibility matrix: a grid of stage × department checkboxes per field. Maps to field_visibility_rules API.
+Save creates a new schema version. Show diff summary: 'N fields added, M fields changed' before confirming.
+No direct delete of fields with submitted data — show warning and offer to archive instead.
+4.5.4 Validation Gates (Phase 5 Checkpoint)
+Non-admin users cannot navigate to /settings/forms.
+Customer detail: field values load correctly, only stage-appropriate fields are shown.
+Submitting an invalid field value shows field-level error inline.
+Form builder save creates new version; old version still queryable via API.
+All pages render without blank-screen errors (ErrorBoundary catches failures gracefully).
+PHASE 6  Coverage Checker Flow & External App Integrations   [Sprint 4 — ~3 days]
+4.6 Phase 6 Objective
+Implement the Coverage Checker special flow and harden all external application integration points.
+4.6.1 Coverage Checker Flow
+A public-facing Customer Creation Page is required — accessible without authentication, scoped to a tenant via a URL token (e.g., /apply/{tenant_slug}).
+Page renders the tenant's active customer form schema. Only fields marked as visible at stage 1 (creation stage) are shown.
+On submit, calls POST /api/v1/customers with source_app = 'coverage_checker'. Returns a payment link. Redirect customer to payment link.
+On payment completion, Finance App webhook fires → pipeline created as per Phase 3 logic.
+4.6.2 External App Integration Hardening
+Implement HMAC-SHA256 signature verification for all inbound webhooks (/external/tasks, /external/payment-confirm). Shared secret configurable per tenant in integration_config table.
+Implement retry-safe idempotency for all external endpoints using external_ref_id.
+All inbound payloads are logged to external_task_logs before any processing — so replays are possible even if downstream processing fails.
+Implement a webhook replay endpoint (admin only): POST /api/v1/admin/external-tasks/{id}/replay. Re-processes the stored payload.
+Rate limiting: external endpoints accept max 100 requests per minute per tenant. Return 429 with Retry-After header on breach.
+4.6.3 Validation Gates (Phase 6 Checkpoint)
+Coverage Checker page loads without authentication for a valid tenant_slug.
+Tampered webhook signature returns 401.
+Duplicate external_ref_id returns 200 with existing record, no duplicate DB rows.
+Replay endpoint successfully reprocesses a previously failed webhook.
+Rate limit: 101st request within a minute returns 429.
+PHASE 7  Security Hardening, Testing & Deployment   [Sprint 4–5 — ~4 days]
+4.7 Phase 7 Objective
+Complete security hardening, write the full test suite, run end-to-end validation, and prepare for production deployment.
+4.7.1 Security Hardening
+RBAC audit: enumerate every new API endpoint. Map required roles. Confirm all role checks use the same middleware pattern as existing endpoints — no custom inline role checks that could be bypassed.
+Tenant isolation audit: run automated tests that authenticate as Tenant A and attempt to query Tenant B resources across all new endpoints. All must return 404 or 403, never Tenant B data.
+Field-level permission audit: test every combination of role × field ownership. A Field Technician should not read or write GIS department fields and vice versa.
+Input sanitization: all JSONB payload fields must be sanitized before storage. No raw HTML accepted in text fields. Validate file upload MIME types on customer_form_submissions file fields.
+SQL injection: all queries use SQLAlchemy parameterized statements — no raw string interpolation.
+4.7.2 Test Suite
+Unit tests: validation engine (all field types, all rule types), payment request generation, HMAC verification, pipeline advance guard logic, form schema versioning.
+Integration tests: full customer creation flow end-to-end (create → payment request → webhook → pipeline created). Coverage Checker flow. Push-back flow. Approval gate flow.
+Regression tests: re-run tests for the three bugs fixed in the development log (blank page on task card click, pipeline 'NOT STARTED' on auto-generated projects, AttributeError on full_name) to ensure they do not regress.
+Load test: simulate 50 concurrent external webhook calls to /external/tasks. Verify idempotency holds under concurrency.
+4.7.3 Deployment Steps
+Rebuild backend Docker image: docker compose build backend.
+Apply all Alembic migrations on production database (with snapshot backup first).
+Restart backend container: docker compose up -d backend.
+Monitor docker compose logs -f backend for 10 minutes. Confirm zero AttributeError, zero unhandled exceptions.
+Smoke test: open a task card, click timeline tab — confirm no blank page. Create a test customer from the Coverage Checker URL — confirm pipeline is created with visual stepper.
+Confirm all existing functionality is intact: task board, task detail modal, project pipeline stepper, activity timeline.
+4.7.4 Final Validation Gates
+All automated tests pass.
+No regressions on the three bugs from the development log.
+Zero cross-tenant data leaks confirmed by automated tenant isolation tests.
+Production deployment smoke test passes all checks above.
+Tech lead sign-off on completed deployment checklist.
+5. Sprint Plan & Timeline
+Sprint
+Phases
+Key Deliverables
+Duration
+Sprint 1
+Phase 1 + Phase 2
+All DB migrations, seed data, Form Builder backend APIs
+~7 days
+Sprint 2
+Phase 3 + Phase 4 (backend)
+Customer APIs, webhook handlers, pipeline stage validation
+~6 days
+Sprint 3
+Phase 4 (frontend) + Phase 5
+Pipeline stepper UI, Customer pages, Form Builder UI
+~7 days
+Sprint 4
+Phase 6 + Phase 7 (start)
+Coverage Checker flow, integration hardening, security audit
+~5 days
+Sprint 5
+Phase 7 (complete)
+Full test suite, load test, production deployment
+~4 days
+ℹ  Timeline assumes one senior full-stack engineer and one frontend engineer. Solo development: add approximately 40% to each sprint estimate.
+6. Risks & Mitigations
+Risk
+Severity
+Mitigation
+Route shadowing re-introduced when registering new routers in main.py
+High
+Document router registration order in main.py comments. Add integration test that hits all known shadowing-prone paths.
+User.full_name accessed directly in new code (regression of known bug)
+High
+Add a linting rule or pre-commit hook that flags any .full_name access on User model. Code review checklist item.
+Pipeline start_pipeline called with wrong argument order
+High
+Write a unit test for start_pipeline argument order. Type-annotate all parameters in pipeline_service.py.
+Payment webhook processed twice under concurrent retries
+Medium
+Idempotency key (external_ref_id) with DB unique constraint. Load test concurrent duplicate webhooks in Phase 7.
+Form schema changes break existing customer submissions
+Medium
+Schema versioning: submissions store form_schema_id. Old versions preserved. Never delete field_definitions.
+Coverage Checker public page exposes customer data to unauthenticated users
+High
+Public page only accepts POST (create); never returns existing customer data. Tenant scoped via slug token.
+Blank page regression in React (no ErrorBoundary on new components)
+Medium
+Enforce ErrorBoundary wrapping as a PR review checklist item for all new page-level and modal components.
+7. Architecture Invariants (Must Never Violate)
+These rules are derived directly from the Opsyn Development Log and must be enforced throughout all phases:
+User Display Name Resolution
+Always and only:
+(user.staff_profile.full_name if user.staff_profile else user.username) if user else 'System'
+Never access user.full_name — it does not exist on the User ORM model.
+ORM Eager Loading for Async Context
+Any query that accesses user.staff_profile must chain .selectinload(User.staff_profile) onto the query. Lazy loading fails in async context.
+Router Registration Order
+In main.py: specific routers (e.g., /api/v1/forms, new customer routers) must be registered before catch-all routers (tasks_router with /{task_id}/...). Comments in main.py must document this ordering constraint.
+Timeline Entry Format
+All activity timeline data — for tasks, projects, and customers — must conform to the TimelineEntry interface. actor_label must never be undefined or null. The is_system boolean must always be explicitly set.
+Pipeline Template Null Safety
+All pipeline service functions must guard: if project.pipeline_template else {}. Auto-generated projects may have no template. The 5-stage fallback seeding must be used in this case.
+Hook File Patterns (if extending Claude Code hooks)
+Any new flag file write must use safeWriteFlag(). Hooks must silent-fail on all filesystem errors. Hooks must honor CLAUDE_CONFIG_DIR env var.
+8. Appendix — Deployment Checklist
+Use this checklist after every phase deployment to staging, and again for production:
+Backend
+docker compose build backend — no build errors
+docker compose up -d backend
+docker compose logs -f backend — zero AttributeError, zero unhandled exceptions for 10 minutes
+All Alembic migrations ran successfully (alembic history shows correct head)
+Seed data present and queryable
+Functional Smoke Tests
+Open a task card → timeline tab loads without blank page
+Create an external task → confirm project pipeline shows visual stepper with stages
+Test Advance Stage and Push Back buttons on project pipeline page
+Create a customer via Coverage Checker URL → payment request generated → webhook → pipeline created with correct stages
+Admin opens Form Builder → creates schema with two fields → saves → version increments
+Security Checks
+Attempt cross-tenant API call → returns 403 or 404, never Tenant B data
+Send tampered webhook → returns 401
+Non-admin attempts to create form schema → returns 403
+Send duplicate external_ref_id → returns 200 with existing record, no duplicate DB row
+END OF IMPLEMENTATION PLAN
+Opsyn Platform  |  Customer Module & Project Pipeline  |  v1.0  |  May 2026

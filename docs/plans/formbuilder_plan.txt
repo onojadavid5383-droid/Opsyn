@@ -1,0 +1,1158 @@
+﻿OPSYN PLATFORM
+Dynamic Form Schema Builder
+World-Class Multi-Tenant Implementation Plan
+Configuration-Driven Data Collection for Every Module
+Customer Module  ·  Infrastructure  ·  Pipeline Stages  ·  Field Operations  ·  Any Future Need
+Version 1.0  |  May 2026  |  Opsyn Engineering
+1. Executive Overview
+The Opsyn Form Schema Builder is a configuration-driven metadata system that allows organization administrators to design, version, and deploy data collection forms entirely from the frontend — without any code changes. It is the foundational layer that makes Opsyn a genuinely multi-tenant, enterprise-grade platform.
+Rather than hardcoding forms for each use case (customer intake, GIS surveys, field technician reports, infrastructure uploads, approval checklists), the platform stores form definitions as structured metadata. The frontend reads those definitions at runtime and renders the appropriate UI. The backend validates submitted data against the same definitions. Every module in Opsyn — past, present, and future — uses this single system.
+1.1 The Problem This Solves
+Without Form Builder
+With Form Builder
+Adding a new data field requires a backend migration, a new API endpoint, and a new frontend component — minimum 1–2 days of engineering work.
+An admin adds a field in the UI in 30 seconds. It is live immediately for the correct department, stage, and role.
+Every tenant has the same fields even if their business process is different.
+Every tenant defines their own schema. Tenant A collects 12 customer fields. Tenant B collects 7 different ones.
+Forms are scattered across modules with inconsistent validation logic.
+One validation engine, one submission format, one audit trail — across every form in the system.
+Infrastructure upload validation is hardcoded in router.py — changing it requires deployment.
+Infrastructure upload column requirements are read from the schema — an admin edits them in the UI.
+Pipeline stages cannot require dynamic field completion — it must be coded per stage.
+Any pipeline stage can require any form schema to be completed — configured in the UI, enforced by the engine.
+1.2 Design Philosophy — Three Non-Negotiables
+Schema-first: the definition of a form is always the source of truth. The UI renders from it. The API validates against it. Reports are generated from it. Nothing hardcoded anywhere.
+Version-immutable: once a schema version is published, it is never mutated. Old submissions are always readable because they reference the exact version they were created under.
+Association-driven: a form schema is only useful in context. The association system is what connects a schema to a module, a pipeline stage, a department, or an external trigger — making the form appear in the right place at the right time.
+2. System Architecture
+2.1 The Five Layers
+Layer
+Name
+What It Stores
+Who Interacts
+1
+Form Schema Registry
+Named schemas with tenant ownership, versioning, status, and module association. The 'what is this form for' layer.
+Admin — creates and publishes schemas
+2
+Field Definition Catalogue
+Every field inside a schema: key, label, data type, validation rules, display order, role visibility, stage visibility. The 'what fields does this form have' layer.
+Admin — adds and configures fields
+3
+Association Map
+Links between a schema and its context: which module, which pipeline stage, which department, which external trigger uses this schema. The 'where does this form appear' layer.
+Admin — attaches schema to contexts
+4
+Submission Store
+Actual submitted values stored as versioned JSONB, linked to the schema version and the entity (customer, project, etc.) they describe. The 'real data' layer.
+End users — fill forms; system — validates and stores
+5
+Validation Engine
+Stateless service that takes (schema_version_id, submitted_data) and returns structured field-level errors. Used by every API endpoint that accepts form data.
+Backend — called on every form submission
+2.2 How a Form Gets From Builder to User
+Admin opens Form Builder → creates schema 'Customer Intake' → adds 8 fields → publishes → system creates schema_version 1.
+Admin opens Association Manager → links 'Customer Intake' schema to the Customer module and to Pipeline Stage 1 (Finance Department).
+A field technician app fires an external task to create a customer. The platform finds the active 'Customer Intake' schema for that tenant and module. Returns the schema definition to the frontend.
+Frontend Form Renderer reads the field definitions and renders the correct input components (text box, number input, date picker, dropdown, etc.) in the configured order.
+User submits. API receives { schema_id, schema_version, entity_id, data: {...} }. Validation Engine checks every field. On success, writes to form_submissions as JSONB. On failure, returns field-level errors.
+Pipeline stage advancement check queries form_submissions for required schemas linked to this stage. If any mandatory schema has no valid submission, advancement is blocked.
+2.3 Module File Structure
+backend/app/modules/form_builder/
+  ├── router.py              # All form builder API endpoints
+  ├── models.py              # ORM: FormSchema, FieldDefinition, FormAssociation, FormSubmission
+  ├── schemas.py             # Pydantic request/response models
+  ├── version_service.py     # Schema versioning, publish, archive logic
+  ├── validation_engine.py   # Core: validates submitted data against field definitions
+  ├── submission_service.py  # Stores, retrieves, and queries form submissions
+  ├── association_service.py # Manages schema ↔ context links
+  └── renderer_service.py    # Generates renderer-ready field config for frontend
+frontend/src/features/form-builder/
+  ├── FormBuilderPage.tsx    # Admin form designer canvas
+  ├── FieldConfigPanel.tsx   # Right-hand field configuration drawer
+  ├── FormRenderer.tsx       # Reusable: renders any schema as a live form
+  ├── SubmissionViewer.tsx   # Displays submitted data for any entity
+  ├── AssociationManager.tsx # Links schemas to modules/stages
+  └── SchemaVersionHistory.tsx
+3. Data Model — Complete Schema Design
+3.1 Core Principle for All Tables
+Every table: id (UUID PK), tenant_id (UUID FK, NOT NULL), created_at, updated_at, created_by (UUID FK users.id), is_deleted (BOOLEAN DEFAULT FALSE).
+Tenant isolation is enforced at the DB query level — never rely on application-layer filtering alone.
+Schema mutations never happen in place — only new versions are created.
+3.2 form_schemas — The Registry
+Column
+Type
+Constraints
+Purpose
+id
+UUID
+PK
+Primary key
+tenant_id
+UUID
+FK tenants, NOT NULL
+Tenant ownership
+name
+VARCHAR(200)
+NOT NULL
+Human name: 'Customer Intake Form'
+machine_name
+VARCHAR(100)
+NOT NULL
+Slug: 'customer_intake'. Used in code references.
+description
+TEXT
+NULLABLE
+Admin-written description
+module
+VARCHAR(50)
+NOT NULL
+'customer' | 'infrastructure' | 'pipeline' | 'field_ops' | 'generic'
+status
+VARCHAR(20)
+DEFAULT 'draft'
+'draft' | 'published' | 'archived'
+current_version
+INTEGER
+DEFAULT 0
+Increments on each publish
+icon
+VARCHAR(50)
+NULLABLE
+UI icon identifier
+color
+VARCHAR(7)
+NULLABLE
+Hex color for UI card
+is_deleted
+BOOLEAN
+DEFAULT FALSE
+Soft delete
+UNIQUE constraint: (machine_name, tenant_id) WHERE is_deleted = FALSE — machine_name is stable across versions.
+3.3 form_schema_versions — Immutable Snapshots
+Column
+Type
+Constraints
+Purpose
+id
+UUID
+PK
+Version record ID
+schema_id
+UUID
+FK form_schemas
+Parent schema
+tenant_id
+UUID
+FK tenants, NOT NULL
+Tenant isolation
+version_number
+INTEGER
+NOT NULL
+1, 2, 3… increments on publish
+published_at
+TIMESTAMPTZ
+NULLABLE
+Set when this version goes live
+published_by
+UUID
+FK users.id, NULLABLE
+Who published
+field_snapshot
+JSONB
+NOT NULL
+Complete snapshot of all field definitions at publish time — immutable record for historical submissions
+changelog
+TEXT
+NULLABLE
+Admin-written change notes
+is_current
+BOOLEAN
+DEFAULT FALSE
+Only one version per schema is current
+💡  field_snapshot stores a JSON copy of all field definitions at publish time. Even if a field is later deleted, submissions tied to this version can always be rendered correctly.
+3.4 field_definitions — The Heart of the System
+Column
+Type
+Constraints
+Purpose
+id
+UUID
+PK
+Field record ID
+schema_id
+UUID
+FK form_schemas
+Parent schema
+schema_version_id
+UUID
+FK form_schema_versions, NULLABLE
+Set when field belongs to a published version
+tenant_id
+UUID
+FK tenants
+Tenant isolation
+field_key
+VARCHAR(100)
+NOT NULL
+Machine key: 'date_of_birth'. Stable. Used in JSONB data.
+label
+VARCHAR(200)
+NOT NULL
+Display label: 'Date of Birth'
+placeholder
+VARCHAR(300)
+NULLABLE
+Input placeholder text
+help_text
+TEXT
+NULLABLE
+Shown below the field to guide users
+field_type
+VARCHAR(30)
+NOT NULL
+See Section 3.5 — full type catalogue
+display_order
+SMALLINT
+NOT NULL DEFAULT 0
+Drag-drop sort order
+is_required
+BOOLEAN
+DEFAULT FALSE
+Hard required — blocks submission if empty
+is_unique
+BOOLEAN
+DEFAULT FALSE
+Value must be unique across submissions for this schema + tenant
+is_readonly
+BOOLEAN
+DEFAULT FALSE
+Shown but not editable in certain contexts
+is_hidden
+BOOLEAN
+DEFAULT FALSE
+Captured but not shown in UI (e.g., system-injected values)
+default_value
+TEXT
+NULLABLE
+Pre-filled value — interpreted per field_type
+validation_rules
+JSONB
+NOT NULL DEFAULT '{}'
+Full validation config — see Section 3.6
+options
+JSONB
+NULLABLE
+For enum/multiselect: [{value, label, color}]
+conditional_logic
+JSONB
+NULLABLE
+Show/hide rules based on other field values — see Section 3.7
+role_visibility
+TEXT[]
+NULLABLE
+Roles that can see this field. NULL = all roles.
+role_editable
+TEXT[]
+NULLABLE
+Roles that can edit. NULL = all roles.
+stage_visible_from
+SMALLINT
+NULLABLE
+Pipeline stage order from which this field becomes visible
+stage_required_at
+SMALLINT
+NULLABLE
+Pipeline stage at which this field becomes mandatory
+department_owner
+UUID
+FK departments.id, NULLABLE
+Department responsible for filling this field
+width
+VARCHAR(10)
+DEFAULT 'full'
+'full' | 'half' | 'third' — grid layout hint
+section_group
+VARCHAR(100)
+NULLABLE
+Groups fields under a collapsible section header
+is_deleted
+BOOLEAN
+DEFAULT FALSE
+Soft delete
+3.5 Field Type Catalogue — Complete
+Type Value
+UI Component
+Stored As
+Validation Applies
+string
+Single-line text input
+TEXT
+min_length, max_length, regex, allowed_chars
+text
+Multi-line textarea
+TEXT
+min_length, max_length
+integer
+Number input (whole)
+INTEGER
+min, max
+float
+Number input (decimal)
+NUMERIC
+min, max, decimal_places
+boolean
+Toggle / Checkbox
+BOOLEAN
+required check only
+date
+Date picker
+DATE (ISO 8601)
+min_date, max_date, no_future, no_past
+datetime
+Date + time picker
+TIMESTAMPTZ
+min_date, max_date
+time
+Time picker
+TIME
+min_time, max_time
+email
+Email input
+TEXT
+RFC 5322 email format enforced
+phone
+Phone input with country code
+TEXT
+E.164 format, country restrictions
+url
+URL input
+TEXT
+URL format enforced
+enum
+Single-select dropdown
+TEXT
+value must be in options list
+multiselect
+Multi-select checkboxes / tags
+TEXT[]
+min_selections, max_selections, values from options
+radio
+Radio button group
+TEXT
+value must be in options list
+file
+File upload
+TEXT (stored path/URL)
+allowed_mime_types, max_size_mb
+image
+Image upload with preview
+TEXT (stored path/URL)
+max_size_mb, min_width, min_height
+coordinates
+Lat/Lng pair input
+JSONB {lat, lng}
+lat range -90/+90, lng range -180/+180
+address
+Structured address block
+JSONB {street, city, state, country, postcode}
+Required sub-fields configurable
+currency
+Amount + currency code
+JSONB {amount, currency}
+min, max, allowed_currencies
+rating
+Star / score selector
+SMALLINT
+min_rating, max_rating
+signature
+Signature pad
+TEXT (base64 image)
+required check only
+lookup
+Foreign key reference to another schema
+UUID
+references: {schema_machine_name, display_field}
+computed
+Read-only value computed from other fields
+TEXT
+formula defined in validation_rules.formula
+section_header
+Visual separator — no data stored
+N/A
+N/A — display only
+3.6 validation_rules JSONB — Full Specification
+The validation_rules column stores a JSON object. Any key not present means 'no restriction for that rule'. All rules are evaluated by the Validation Engine.
+Rule Key
+Applies To Types
+Value Type
+Meaning
+required
+All
+boolean
+Field must have a non-null, non-empty value
+min_length
+string, text
+integer
+Minimum character count
+max_length
+string, text, email, phone
+integer
+Maximum character count
+regex
+string, text, phone
+string (pattern)
+Value must match this regex pattern
+allowed_chars
+string
+string (char class)
+Only these characters allowed: e.g. 'alphanumeric'
+min
+integer, float, rating
+number
+Minimum numeric value
+max
+integer, float, rating
+number
+Maximum numeric value
+decimal_places
+float, currency
+integer
+Maximum decimal places allowed
+min_date
+date, datetime
+ISO date string
+Earliest allowed date
+max_date
+date, datetime
+ISO date string
+Latest allowed date
+no_future
+date, datetime
+boolean
+Date cannot be in the future
+no_past
+date, datetime
+boolean
+Date cannot be in the past
+min_selections
+multiselect
+integer
+Minimum items that must be selected
+max_selections
+multiselect
+integer
+Maximum items that can be selected
+allowed_mime_types
+file, image
+string[]
+e.g. ['image/jpeg','application/pdf']
+max_size_mb
+file, image
+number
+Maximum file size in megabytes
+min_width
+image
+integer
+Minimum image width in pixels
+min_height
+image
+integer
+Minimum image height in pixels
+unique_in_schema
+All
+boolean
+Value must be unique across all submissions for this schema+tenant
+allowed_currencies
+currency
+string[]
+e.g. ['NGN','USD','GBP']
+references
+lookup
+object {schema_machine_name, display_field}
+Foreign key target schema
+formula
+computed
+string
+Formula string: e.g. '{age} * {rate}'
+custom_error_message
+All
+string
+Override the default error message for this field
+3.7 conditional_logic JSONB — Show/Hide Logic
+Each field can carry conditional logic that controls its visibility based on the values of other fields in the same form. The Validation Engine and Form Renderer both evaluate these rules.
+conditional_logic: {
+  "action": "show",          // "show" | "hide" | "require" | "clear"
+  "match": "all",            // "all" (AND) | "any" (OR)
+  "conditions": [
+    { "field_key": "customer_type", "operator": "equals", "value": "Business" },
+    { "field_key": "annual_revenue", "operator": "greater_than", "value": 1000000 }
+  ]
+}
+Operator
+Applies To Types
+Meaning
+equals
+All
+Field value exactly equals the specified value
+not_equals
+All
+Field value does not equal the specified value
+contains
+string, text, multiselect
+Value contains the substring or includes the item
+not_contains
+string, text, multiselect
+Value does not contain
+greater_than
+integer, float, date
+Numeric/date value is greater than
+less_than
+integer, float, date
+Numeric/date value is less than
+is_empty
+All
+Field has no value
+is_not_empty
+All
+Field has any value
+in
+enum, multiselect
+Value is one of a provided list
+not_in
+enum, multiselect
+Value is not in the provided list
+3.8 form_associations — The Linking System
+Column
+Type
+Purpose
+id
+UUID PK
+Association record ID
+tenant_id
+UUID FK
+Tenant isolation
+schema_id
+UUID FK form_schemas
+The form schema being associated
+schema_version_id
+UUID FK, NULLABLE
+Pin to a specific version — NULL means always use current
+context_type
+VARCHAR(50)
+'module' | 'pipeline_stage' | 'department' | 'external_trigger' | 'user_role'
+context_id
+UUID NULLABLE
+ID of the module, stage, department, trigger — NULL for wildcard associations
+context_label
+VARCHAR(200)
+Human-readable context name for display
+is_mandatory
+BOOLEAN DEFAULT FALSE
+If TRUE, this form must be submitted before the context allows progression
+display_order
+SMALLINT DEFAULT 0
+Order among multiple forms in the same context
+trigger_event
+VARCHAR(50) NULLABLE
+'on_create' | 'on_stage_enter' | 'on_approval' | 'manual'
+auto_populate_fields
+JSONB NULLABLE
+Map of field_key → system_value to pre-fill automatically
+One form schema can have many associations. A pipeline stage can require many schemas. The association system is the glue between the form builder and the rest of the platform.
+3.9 form_submissions — The Data Layer
+Column
+Type
+Purpose
+id
+UUID PK
+Submission ID
+tenant_id
+UUID FK
+Tenant isolation
+schema_id
+UUID FK form_schemas
+Which schema this submission belongs to
+schema_version_id
+UUID FK form_schema_versions
+Exact version at time of submission — immutable reference
+entity_type
+VARCHAR(50)
+'customer' | 'project' | 'infrastructure_asset' | 'pipeline_stage' | 'standalone'
+entity_id
+UUID NULLABLE
+ID of the associated entity (customer_id, project_id, etc.)
+association_id
+UUID FK form_associations, NULLABLE
+Which association triggered this submission
+submitted_by
+UUID FK users.id
+Submitting user
+submitted_at
+TIMESTAMPTZ
+Submission timestamp
+status
+VARCHAR(20) DEFAULT 'submitted'
+'draft' | 'submitted' | 'approved' | 'rejected'
+data
+JSONB NOT NULL
+Actual field values: { field_key: value, ... }
+draft_data
+JSONB NULLABLE
+Auto-saved draft before final submission
+approved_by
+UUID FK users.id, NULLABLE
+For submissions requiring approval
+approved_at
+TIMESTAMPTZ NULLABLE
+Approval timestamp
+rejection_reason
+TEXT NULLABLE
+Reason if status='rejected'
+Indexes on form_submissions:
+GIN index on data column — enables fast JSONB field-value queries
+Composite index: (schema_id, entity_id, tenant_id) — fastest lookup pattern
+Composite index: (entity_type, entity_id, tenant_id) — 'give me all submissions for customer X'
+Composite index: (schema_id, schema_version_id, submitted_at) — version-aware time-series queries
+4. Validation Engine — Deep Design
+4.1 Engine Architecture
+The Validation Engine is a pure stateless function. It takes a schema version snapshot and a submitted data object, runs every field through its validation rules, and returns a structured result. It never writes to the database. It can be called from any API endpoint, any background job, or even the frontend (as a preview).
+validate(schema_version_snapshot: FieldDefinition[], data: dict, context: ValidationContext) -> ValidationResult
+Input
+Type
+Description
+schema_version_snapshot
+FieldDefinition[]
+Complete list of field definitions for the version being validated against. Taken from field_snapshot JSONB of the version record.
+data
+dict
+Submitted key-value pairs. Keys are field_key strings. Values are raw submitted values.
+context
+ValidationContext
+Carries: tenant_id, submitting_user_role, current_pipeline_stage_order, is_draft (draft submissions skip required-field checks).
+Output Field
+Type
+Description
+is_valid
+boolean
+True only if zero errors across all fields
+errors
+FieldError[]
+List of {field_key, field_label, error_code, message} — one entry per failing rule per field
+warnings
+FieldWarning[]
+Non-blocking notices (e.g., coordinate (0,0) warning)
+coerced_data
+dict
+Validated and type-coerced data ready for storage — integers parsed, dates normalized to ISO, etc.
+missing_required_fields
+string[]
+field_keys of required fields not present in submitted data
+4.2 Validation Pass Order
+Type coercion: attempt to coerce submitted value to the field's declared type. If coercion fails (e.g., 'abc' submitted for an integer field), record a type_error and skip further rules for that field.
+Required check: if field is required and value is null/empty after coercion, record required_error.
+Conditional visibility: if field is conditionally hidden by conditional_logic and the conditions are met, skip validation entirely for that field — hidden fields cannot be required.
+Stage-based required check: if context.current_pipeline_stage_order >= field.stage_required_at and value is empty, record stage_required_error.
+Role-based edit check: if submitting user's role is not in field.role_editable, ignore submitted value — do not validate it, do not store it. Silently drop it.
+Validation rules: evaluate all applicable rules from validation_rules JSONB in order: length → range → pattern → enum membership → date constraints → uniqueness (DB check).
+Conditional logic evaluation: if a field's conditional_logic has action='require', apply required check only when conditions are met.
+4.3 Dual Validation — Frontend Preview + Backend Authority
+The validation engine runs in two places:
+Frontend (TypeScript port): runs on field blur and on submit-attempt. Gives instant feedback. Uses the schema definition fetched from the API. Prevents obviously invalid submissions reaching the server.
+Backend (Python, authoritative): runs on every POST /submissions call. The frontend validation is a UX convenience — the backend validation is the source of truth. Any discrepancy means the backend wins.
+💡  The frontend validation config is generated from the same field_definitions data the backend uses — served by GET /forms/schemas/{id}/renderer-config. This guarantees they are always in sync.
+5. API Endpoint Design
+5.1 Schema Management APIs
+Method
+Path
+Description
+Role Required
+GET
+/api/v1/forms/schemas
+List all schemas for tenant. Filter: module, status. Paginated.
+Staff
+POST
+/api/v1/forms/schemas
+Create new schema (draft). Requires name, machine_name, module.
+Admin
+GET
+/api/v1/forms/schemas/{id}
+Get schema with current-version field definitions.
+Staff
+PUT
+/api/v1/forms/schemas/{id}
+Update schema metadata (name, description, icon, color). Does not change fields.
+Admin
+POST
+/api/v1/forms/schemas/{id}/publish
+Publish current draft fields as a new immutable version. Creates field_snapshot.
+Admin
+POST
+/api/v1/forms/schemas/{id}/archive
+Archive schema — no new submissions accepted. Existing data preserved.
+Admin
+GET
+/api/v1/forms/schemas/{id}/versions
+List all versions with changelog and field count.
+Admin
+GET
+/api/v1/forms/schemas/{id}/versions/{version}
+Get specific version with full field_snapshot.
+Admin
+GET
+/api/v1/forms/schemas/{id}/renderer-config
+Returns frontend-optimized field config for the Form Renderer component. Includes field order, types, validation as JSON schema, conditional logic.
+Staff
+POST
+/api/v1/forms/schemas/{id}/duplicate
+Clone schema as a new draft with all field definitions copied.
+Admin
+5.2 Field Definition APIs
+Method
+Path
+Description
+Role Required
+GET
+/api/v1/forms/schemas/{id}/fields
+List all fields for schema with full definition.
+Admin
+POST
+/api/v1/forms/schemas/{id}/fields
+Add a field to the schema draft. Returns new field with auto-generated field_key.
+Admin
+PUT
+/api/v1/forms/schemas/{id}/fields/{field_id}
+Update field definition. Only allowed on draft schemas.
+Admin
+DELETE
+/api/v1/forms/schemas/{id}/fields/{field_id}
+Soft-delete a field. Blocked if the schema has published submissions referencing this field.
+Admin
+POST
+/api/v1/forms/schemas/{id}/fields/reorder
+Update display_order for multiple fields in one call. Body: [{field_id, display_order}].
+Admin
+GET
+/api/v1/forms/field-types
+Return the complete field type catalogue with supported validation_rules per type. Used by the Form Builder UI to populate the field type selector.
+Admin
+5.3 Association APIs
+Method
+Path
+Description
+Role Required
+GET
+/api/v1/forms/associations
+List all associations for tenant. Filter: schema_id, context_type.
+Admin
+POST
+/api/v1/forms/associations
+Create association: link schema to a context.
+Admin
+PUT
+/api/v1/forms/associations/{id}
+Update association (is_mandatory, display_order, trigger_event).
+Admin
+DELETE
+/api/v1/forms/associations/{id}
+Remove association. Does not delete submissions.
+Admin
+GET
+/api/v1/forms/context/{context_type}/{context_id}/schemas
+Get all schemas associated with a given context. Used by pipeline, customer module, etc. to discover which forms to render.
+Staff
+5.4 Submission APIs
+Method
+Path
+Description
+Role Required
+POST
+/api/v1/forms/submissions
+Submit data for a schema. Body: {schema_id, entity_type, entity_id, data}. Runs validation engine. Returns submission ID or field errors.
+Staff
+POST
+/api/v1/forms/submissions/draft
+Save a draft submission. Skips required-field validation. Useful for auto-save.
+Staff
+GET
+/api/v1/forms/submissions/{id}
+Get a submission with rendered field labels and values.
+Staff
+PUT
+/api/v1/forms/submissions/{id}
+Update a submission if status is 'draft' or if admin override.
+Staff/Admin
+GET
+/api/v1/forms/submissions?entity_type=&entity_id=
+Get all submissions for a specific entity (e.g., all forms filled for customer X).
+Staff
+GET
+/api/v1/forms/submissions?schema_id=
+Get all submissions for a schema. Paginated. Supports field-level filters via JSONB query.
+Admin
+POST
+/api/v1/forms/validate
+Dry-run validation: validate data without storing. Returns errors. Used by frontend for real-time feedback.
+Staff
+GET
+/api/v1/forms/submissions/export?schema_id=
+Export submissions as .xlsx. Columns = field labels. Each row = one submission.
+Admin
+6. Form Builder UI — Frontend Design
+6.1 Builder Page Layout
+The Form Builder is a three-panel layout:
+Panel
+Position
+Content
+Field Type Palette
+Left sidebar (240px)
+Draggable field type buttons grouped by category: Basic (Text, Number, Date, Email), Selection (Dropdown, Multi-select, Radio), Advanced (File, Image, Coordinates, Address, Lookup, Computed), Layout (Section Header, Divider).
+Form Canvas
+Center (flexible width)
+The form being built. Fields rendered as cards in order. Drag-to-reorder via handle. Click to select. Delete icon on hover. Section headers collapsible. Live preview toggle shows the form as it will look to users.
+Field Config Panel
+Right sidebar (320px)
+Configuration drawer for the selected field. Tabs: Basic (label, key, placeholder, help text, required toggle, width), Validation (type-appropriate rules), Visibility (roles, stage, department), Conditional Logic (rule builder UI), Advanced (computed formula, lookup target).
+6.2 Field Configuration — Detailed UI Rules
+Machine Key (field_key) Management
+Auto-generated from label on first type: 'Date of Birth' → 'date_of_birth'. Editable before first publish.
+After first publish, field_key is locked and shown as read-only. It is the stable reference used in all stored data.
+If admin tries to set a duplicate key, show inline error: 'This key is already used in this schema.'
+Validation Rule Builder
+Renders dynamically based on field_type. A 'string' field shows: Min Length, Max Length, Regex, Custom Error Message. A 'date' field shows: Min Date, Max Date, No Future toggle, No Past toggle.
+Regex field includes a test input — admin types a sample value and sees pass/fail in real time.
+Range fields (min/max) show a live preview: 'Value must be between 18 and 99.'
+Conditional Logic Builder
+'Show this field when...' / 'Hide this field when...' / 'Make this field required when...'
+Condition rows: select source field → select operator → enter value. Add/remove condition rows. Toggle AND/OR between conditions.
+Live preview: as admin configures conditions, the canvas shows the field as greyed-out when it would be hidden.
+Options Manager (for enum, multiselect, radio)
+Add options via text input. Each option: value (machine), label (display), color (optional for badge display).
+Bulk paste: paste a comma-separated list, system splits into individual options.
+Drag-to-reorder options.
+6.3 Publishing Workflow in the UI
+Admin works on schema in draft mode. Canvas shows a yellow DRAFT badge.
+Click 'Publish Schema' button. System shows a diff preview: fields added since last publish, fields changed, fields removed.
+Admin enters optional changelog note: 'Added company registration number field for corporate customers.'
+Confirm → API calls POST /schemas/{id}/publish → new version created → canvas shows version number and green PUBLISHED badge.
+From this point, fields are locked (no edits). To make changes, admin clicks 'Create New Draft' → clones current field set into an editable draft → edit → publish again.
+6.4 Association Manager UI
+Separate page: Settings → Forms → [Schema Name] → Associations.
+'Add Association' button opens a modal: select context type (Module, Pipeline Stage, Department, External Trigger), then select the specific context from a dropdown list.
+Set: Mandatory toggle, Trigger Event (On Create, On Stage Enter, Manual), Display Order.
+Preview section shows: 'This form will appear when a user reaches Pipeline Stage 3 (GIS Department). It is mandatory before advancing.'
+7. Form Renderer — Reusable Component
+FormRenderer is a single React component used everywhere a form appears in the platform. It takes a schema definition and renders the correct UI. It is not aware of what the form is for — it just renders fields.
+7.1 Component API
+<FormRenderer
+  schemaId={string}                   // Required — which schema to render
+  entityType={string}                 // 'customer' | 'project' | ...
+  entityId={string | null}            // Pre-fill from existing submission if present
+  context={{ stage, role, dept }}     // Drives conditional field visibility
+  onSubmit={(data) => void}           // Called with coerced data on valid submit
+  onDraftSave={(data) => void}        // Called on auto-save (every 30s)
+  readOnly={boolean}                  // Show values without edit capability
+  showProgress={boolean}              // Show a progress bar: N of M required fields filled
+  highlightMissing={boolean}          // Highlight unfilled required fields (for stage gate)
+/>
+7.2 Field Type → UI Component Mapping
+field_type
+Rendered As
+Library / Notes
+string
+<input type='text'>
+Standard HTML input
+text
+<textarea>
+Auto-resizes to content
+integer
+<input type='number' step='1'>
+Prevents decimal input
+float
+<input type='number' step='any'>
+Shows decimal_places precision
+boolean
+Toggle switch
+Accessible ARIA toggle
+date
+Date picker
+Native or react-datepicker — respects min/max
+datetime
+Date + time picker
+react-datepicker with time
+email
+<input type='email'>
+Browser validation + custom regex
+phone
+Phone input with flag
+react-phone-input-2 with E.164 output
+enum
+Select dropdown
+react-select — searchable for long lists
+multiselect
+Tag selector
+react-select isMulti
+radio
+Radio group
+Accessible fieldset/legend
+file
+File drop zone
+react-dropzone — shows allowed types
+image
+Image drop zone with preview
+react-dropzone + image preview
+coordinates
+Dual input (lat, lng) + mini map
+Leaflet map — click to set point
+address
+Address block sub-form
+Google Places Autocomplete or manual fields
+currency
+Number input + currency selector
+Custom compound input
+rating
+Star rating
+react-rating
+lookup
+Async search select
+Queries the referenced schema's submissions
+computed
+Read-only value with formula result
+Auto-updates when dependency fields change
+section_header
+Bold section title + divider
+Visual only — no input
+7.3 Auto-Save & Draft System
+Every 30 seconds while a user is filling a form, FormRenderer calls POST /submissions/draft silently.
+On next open of the same form for the same entity, the renderer fetches the draft and pre-fills all fields.
+A banner shows: 'Unsaved draft from 5 minutes ago — resume or discard?'
+Draft submissions never trigger stage advancement checks — only final submissions do.
+8. Integration with Existing Opsyn Modules
+8.1 Customer Module Integration
+The Customer module stops having hardcoded fields. Instead:
+On tenant setup, the system checks if a schema associated with module='customer' and trigger_event='on_create' exists. If yes, it uses that schema for the customer creation form.
+Customer detail page: GET /forms/context/module/customer/schemas returns all associated schemas. For each schema, FormRenderer is embedded in the appropriate tab.
+Field values previously stored in customer_field_values are migrated to form_submissions JSONB. The field definitions move from hardcoded Python to the schema builder.
+8.2 Pipeline Stage Integration
+Each pipeline stage in the system has an id. When a stage is entered, GET /forms/context/pipeline_stage/{stage_id}/schemas returns all mandatory and optional forms for that stage.
+The stage advancement validation currently in pipeline_service.py is extended: before allowing advance_stage, query form_submissions for all submissions where association_id matches a mandatory association for this stage and entity_id = project.id. If any mandatory schema has no valid submission with status='submitted', return HTTP 422 with the list of missing forms.
+This replaces the current hardcoded stage_field_completion table with a generic, schema-driven check.
+8.3 Infrastructure Upload Integration
+The infrastructure upload validation engine (upload_service.py) currently hardcodes required column names and validation rules. After this module:
+Each asset type (splitter, cabinet, OLT) has an associated form schema with machine_name = 'infra_splitter_upload', 'infra_cabinet_upload', etc.
+The upload validator reads required columns and their types from the schema's field_definitions — not from hardcoded lists.
+An admin can add a new required column to the upload format by adding a field to the schema in the UI — no code change, no deployment.
+Excel error reports use field labels from the schema as column headers.
+8.4 Audit Log Integration
+Every form submission is logged to the existing infrastructure_audit_log (or a dedicated form_submission_audit_log) with:
+actor_label resolved via the established pattern: (user.staff_profile.full_name if user.staff_profile else user.username) if user else 'System'
+old_data: previous submission JSONB if this is an update
+new_data: new submission JSONB
+action: 'form_submitted' | 'form_updated' | 'form_approved' | 'form_rejected'
+9. Implementation Phases
+Nine phases, sequential. Each ends with a mandatory validation checkpoint before the next begins.
+PHASE 1  Database Schema & Migrations   [Sprint 1 — ~3 days]
+Objective
+Create all database tables. Establish indexing strategy. No API or UI work.
+Write Alembic migrations in order: form_schemas → form_schema_versions → field_definitions → form_associations → form_submissions.
+Add GIN indexes on field_snapshot (JSONB) in form_schema_versions and data (JSONB) in form_submissions.
+Add composite indexes: (schema_id, entity_id, tenant_id) on form_submissions; (machine_name, tenant_id) with partial WHERE is_deleted=FALSE on form_schemas.
+Add CHECK constraint: field_type IN ('string','text','integer','float','boolean','date','datetime','time','email','phone','url','enum','multiselect','radio','file','image','coordinates','address','currency','rating','signature','lookup','computed','section_header').
+Seed one test schema ('Test Customer Form') with 5 field definitions for use in Phase 2 unit tests.
+Checkpoint
+All migrations run on clean DB without error; rollback works cleanly.
+UNIQUE constraint on (machine_name, tenant_id) enforced.
+GIN index on form_submissions.data confirmed via EXPLAIN ANALYZE on a JSONB query.
+PHASE 2  Validation Engine   [Sprint 1 — ~3 days]
+Objective
+Build the core validation engine — the most critical component. All correctness guarantees depend on this.
+Implement validate(schema_snapshot, data, context) → ValidationResult. Cover all 23 field types and all validation_rules keys documented in Section 3.6.
+Implement type coercion for each field type — convert string inputs to correct Python types with clear error messages on failure.
+Implement conditional_logic evaluation — resolve show/hide/require based on current data values.
+Implement role-based field filtering — silently drop values for fields the user's role cannot edit.
+Implement stage-based required-field check using context.current_pipeline_stage_order.
+Write comprehensive unit tests: minimum 3 test cases per field type covering valid value, invalid type, boundary condition. Test conditional logic for all operators. Test role filtering.
+Checkpoint
+Unit test suite passes: 100% of field types covered, all operators tested.
+Validation is stateless — calling it twice with the same input produces the same output.
+Coerced data output is correctly typed for all field types.
+PHASE 3  Schema & Field Management APIs   [Sprint 2 — ~3 days]
+Objective
+Build all schema management, field management, and versioning API endpoints.
+Create form_builder_router with prefix /api/v1/forms. Register in main.py BEFORE tasks_router.
+Implement all Schema Management APIs from Section 5.1.
+Implement all Field Definition APIs from Section 5.2.
+Implement publish logic: snapshot all current field_definitions into form_schema_versions.field_snapshot JSONB; set is_current=TRUE; increment current_version; set all fields to schema_version_id.
+Implement GET /field-types endpoint that returns the full type catalogue with supported validation_rules per type — used by the Form Builder UI.
+Implement GET /renderer-config: transforms field_definitions into a frontend-optimized format including JSON Schema validation config for client-side validation.
+Checkpoint
+Full CRUD on schemas and fields works with tenant isolation.
+Publish creates immutable version; field edits after publish are rejected with 409.
+GET /renderer-config returns valid JSON that can drive the Form Renderer component.
+Duplicate machine_name within tenant returns 409 with clear error.
+PHASE 4  Association & Submission APIs   [Sprint 2 — ~3 days]
+Objective
+Build association management and form submission APIs including the validation dry-run endpoint.
+Implement all Association APIs from Section 5.3.
+Implement POST /submissions — full validation engine call, store coerced data, write audit log entry.
+Implement POST /submissions/draft — store without required-field checks.
+Implement GET /submissions?entity_type=&entity_id= — fetch all submissions for an entity with field labels rendered from schema.
+Implement POST /validate (dry-run) — validate data without storing, return errors.
+Implement GET /submissions/export — generate .xlsx with field labels as columns, one row per submission.
+Implement GET /context/{context_type}/{context_id}/schemas — the key integration endpoint used by pipeline, customer module, and infrastructure.
+Checkpoint
+POST /submissions with invalid data returns field-level errors matching validation engine output.
+Draft submission does not trigger required-field validation.
+GET /context/pipeline_stage/{id}/schemas returns correct schemas in display_order.
+Export produces valid .xlsx with correct field labels.
+PHASE 5  Form Builder UI — Canvas & Field Config   [Sprint 3 — ~5 days]
+Objective
+Build the admin Form Builder UI: three-panel canvas, field type palette, field config drawer, and drag-to-reorder.
+Route: /settings/forms. Schema list page with cards showing name, module, version, field count, status badge, last published date. Search and filter by module.
+Route: /settings/forms/new. Create schema form: name, machine_name (auto-generated, editable), module selector, description, icon picker, color picker.
+Route: /settings/forms/{id}/builder. Three-panel layout as described in Section 6.1. Implement drag-to-reorder using @dnd-kit/core (same DnD library to use throughout the platform for consistency).
+Field Type Palette: render all 23 field types as draggable tiles grouped by category. Drag onto canvas inserts field. Click on palette item also inserts at end.
+Field Config Panel: implement all tabs (Basic, Validation, Visibility, Conditional Logic, Advanced) with dynamic rule rendering per field type using GET /forms/field-types.
+Conditional Logic Builder: visual rule builder UI — add condition rows, select field, select operator, enter value. AND/OR toggle. Live canvas preview of hide/show.
+Options Manager for enum/multiselect/radio: add, edit, reorder, delete options. Bulk paste support.
+All pages wrapped in ErrorBoundary.
+Checkpoint
+Can create a schema with 10 fields of mixed types entirely from UI.
+Drag-to-reorder updates field display_order via API.
+Conditional logic: hide field B when field A equals 'No' — preview shows correct behaviour.
+Validation rule regex tester works inline.
+PHASE 6  Publishing Workflow & Version History UI   [Sprint 3 — ~2 days]
+Objective
+Implement the publish flow, diff preview, changelog, and version history browser.
+Publish button in builder opens diff modal: shows added/changed/removed fields since last version. Admin writes changelog. Confirm → POST /schemas/{id}/publish.
+Route: /settings/forms/{id}/versions. Table of all versions: version number, published date, published by, changelog, field count, View button.
+Version detail view: read-only rendering of the field_snapshot for that version — shows exactly what the form looked like.
+'Create New Draft' from published schema clones fields into editable draft with banner: 'Editing draft based on Version N.'
+Checkpoint
+Publish diff correctly identifies changed fields.
+Post-publish, builder shows fields as locked (read-only).
+Version history shows all versions with correct metadata.
+PHASE 7  Form Renderer Component & Submission UI   [Sprint 4 — ~4 days]
+Objective
+Build the reusable FormRenderer component and all submission-side UI.
+Implement FormRenderer as described in Section 7. Use GET /renderer-config to fetch field config. Render correct input component for each field_type.
+Implement auto-save: POST /submissions/draft every 30 seconds when form is dirty. Show 'Saved N seconds ago' indicator.
+Draft restoration banner: when opening a form with an existing draft, show 'Unsaved draft from [time] — Resume or Discard.'
+Submission progress bar: when showProgress=true, count filled required fields vs total required fields.
+highlightMissing mode: when stage gate blocks advancement, all unfilled required fields turn red with a 'Required to advance' label.
+Read-only mode: FormRenderer renders all values as styled text, not inputs. Used for viewing submitted forms.
+Integrate FormRenderer into: Customer Detail page (Fields tab), Pipeline Stage view (stage forms panel), Infrastructure upload preview.
+Checkpoint
+FormRenderer renders all 23 field types correctly.
+Submit with missing required fields shows field-level errors inline.
+Auto-save fires and draft is retrievable on page reload.
+FormRenderer inside Customer Detail page submits correctly and data appears in GET /submissions.
+PHASE 8  Association Manager UI & Module Integration   [Sprint 4 — ~3 days]
+Objective
+Build Association Manager UI and wire the form builder into all existing modules.
+Route: /settings/forms/{id}/associations. List of current associations with context details. Add Association button opens modal.
+Association modal: context type selector → context search (pipeline stage dropdown, department list, module list) → mandatory toggle → trigger event selector → display order.
+Update Customer module: remove hardcoded field rendering. Use GET /context/module/customer/schemas to discover forms. Render via FormRenderer.
+Update Pipeline Stage advancement: add schema-based mandatory form check in pipeline_service.py before calling advance_stage. Return structured error listing missing form names.
+Update Infrastructure upload validator: read required columns from schema field_definitions instead of hardcoded lists.
+Checkpoint
+Association created for Customer module → FormRenderer appears in Customer Detail page.
+Association created for Pipeline Stage 3 as mandatory → stage advancement blocked until form submitted.
+Infrastructure upload with schema-driven column validation correctly rejects missing columns.
+PHASE 9  Testing, Security Hardening & Deployment   [Sprint 5 — ~4 days]
+Objective
+Complete full test suite, security audit, and production deployment.
+Unit tests: validation engine (all types, all rules, all operators, role filtering, stage gating, conditional logic).
+Integration tests: full schema create → field add → publish → submission → query workflow. Association → stage gate enforcement. Draft save and restore.
+Security: tenant isolation (Tenant A cannot read Tenant B schemas or submissions); role enforcement (non-admin cannot publish); field-level role filtering (verified via submission query); JSONB injection safety (all values parameterized).
+Regression tests: existing customer module, pipeline advancement, infrastructure upload — all unbroken.
+Performance: load test POST /submissions with 1,000 concurrent submissions for the same schema. Measure GIN index effectiveness on JSONB queries.
+Deploy: run migrations, rebuild backend, smoke test all critical paths.
+10. Sprint Plan & Timeline
+Sprint
+Phases
+Key Deliverables
+Days
+Sprint 1
+1 + 2
+DB schema, all indexes, full validation engine with unit tests
+~6
+Sprint 2
+3 + 4
+All backend APIs — schema, fields, versions, associations, submissions
+~6
+Sprint 3
+5 + 6
+Form Builder UI canvas, field config, publishing workflow, version history
+~7
+Sprint 4
+7 + 8
+Form Renderer, auto-save, module integrations, association manager
+~7
+Sprint 5
+9
+Testing, security, performance, deployment
+~4
+Total: ~30 working days solo. With one backend + one frontend engineer in parallel: ~18 days.
+11. Risks & Mitigations
+Risk
+Severity
+Mitigation
+Schema version migration complexity — existing customer_field_values data does not map cleanly to form_submissions JSONB
+High
+Write a one-time data migration script in Phase 1 that transforms existing field values into form_submission rows against a seed schema version. Run on staging first. Rollback: restore customer_field_values table.
+form_builder_router catch-all routes shadow existing task routes
+High
+Register form_builder_router before tasks_router in main.py. Add integration test that hits /api/v1/tasks/{id} after form router registration.
+actor_label resolved as None in form submission audit log
+High
+All submission API handlers must fetch user with selectinload(User.staff_profile). Code review checklist item.
+JSONB query performance degrades at high submission volume
+Medium
+GIN index on form_submissions.data. For reporting queries, consider a materialized view that flattens common schemas. Evaluate at 100k+ submissions.
+Conditional logic evaluation on frontend and backend diverges
+Medium
+Generate frontend validation config from the same data as backend. Add integration test that submits data the frontend would consider valid and confirms backend also accepts it — and vice versa for invalid cases.
+Admin deletes a field that has submitted data
+Medium
+Block hard delete if form_submissions.data JSONB for this schema contains the field_key in any row. Offer 'archive field' instead — field stays in field_snapshot, hidden from future forms, but historical data remains readable.
+field_key changed after submissions exist
+Medium
+Lock field_key after first submission is recorded for this schema (not just after publish). Show warning if admin tries to edit key.
+FormRenderer blank-page crash in a pipeline stage view
+Medium
+ErrorBoundary wraps FormRenderer everywhere. Fallback shows: 'Form could not be loaded — contact your administrator.' with the schema name for debugging.
+Large forms (50+ fields) cause slow render
+Low
+Virtual scrolling in the Form Builder canvas for large schemas. FormRenderer renders sections on demand (collapsible sections lazy-render their fields).
+12. Future Extensions (Post-MVP)
+Feature
+Description
+Complexity
+Form Analytics Dashboard
+Charts showing submission rates, most-skipped fields, average completion time per form.
+Medium
+Submission Approval Workflow
+Some forms require manager approval before status moves to 'approved'. Email/in-app notification sent to approver.
+Medium
+Form Templates Marketplace
+Tenant can export a schema as a template and import templates from a shared library. Pre-built templates: Customer Intake, Site Survey, KYC, etc.
+High
+Multi-Language Field Labels
+field_definitions carry a labels JSONB: { 'en': 'Date of Birth', 'fr': 'Date de naissance' }. FormRenderer renders in user's language.
+Medium
+External Form Links
+Generate a public URL for a form that allows anonymous submission. Submissions tied to the tenant but not a user. Used for customer self-service.
+Medium
+Formula Field Enhancements
+Computed fields support richer formulas: SUM, IF, CONCATENATE, LOOKUP across schemas.
+High
+PDF/Print Submission
+Generate a PDF version of any submission using the schema labels and submitted values. Used for printed reports and field records.
+Low
+Bulk Submission Import
+Upload a .xlsx file where each row is a form submission. The upload system reads columns from the schema's field_definitions — the infrastructure upload is a special case of this general capability.
+Medium
+END OF IMPLEMENTATION PLAN
+Opsyn Platform  |  Dynamic Form Schema Builder  |  v1.0  |  May 2026
+

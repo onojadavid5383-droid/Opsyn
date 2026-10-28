@@ -1,0 +1,120 @@
+- generic [ref=e3]:
+  - link "Skip to content" [ref=e4] [cursor=pointer]:
+    - /url: "#main"
+  - complementary "Primary" [ref=e5]:
+    - link "OpSyn — Command Center" [ref=e6] [cursor=pointer]:
+      - /url: /dashboard
+      - img "Opsyn logo mark" [ref=e7]
+      - generic [ref=e17]: OpSyn
+    - navigation "Main" [ref=e18]:
+      - generic [ref=e19]:
+        - generic [ref=e20]: Monitor
+        - list "Monitor" [ref=e21]:
+          - listitem [ref=e22]:
+            - link "Command Center" [ref=e23] [cursor=pointer]:
+              - /url: /dashboard
+          - listitem [ref=e30]:
+            - link "Alarms & outages" [ref=e31] [cursor=pointer]:
+              - /url: /outage
+          - listitem [ref=e38]:
+            - link "Network map" [ref=e39] [cursor=pointer]:
+              - /url: /network
+      - generic [ref=e43]:
+        - generic [ref=e44]: Operate
+        - list "Operate" [ref=e45]:
+          - listitem [ref=e46]:
+            - link "Tasks" [ref=e47] [cursor=pointer]:
+              - /url: /tasks
+          - listitem [ref=e52]:
+            - link "Projects" [ref=e53] [cursor=pointer]:
+              - /url: /projects
+          - listitem [ref=e57]:
+            - link "Shifts" [ref=e58] [cursor=pointer]:
+              - /url: /shifts
+          - listitem [ref=e64]:
+            - link "Customers" [ref=e65] [cursor=pointer]:
+              - /url: /customers
+      - generic [ref=e71]:
+        - generic [ref=e72]: Engineer
+        - list "Engineer" [ref=e73]:
+          - listitem [ref=e74]:
+            - link "Infrastructure" [ref=e75] [cursor=pointer]:
+              - /url: /infrastructure
+          - listitem [ref=e80]:
+            - link "FTTx Designer" [ref=e81] [cursor=pointer]:
+              - /url: /fttx-designer
+      - generic [ref=e88]:
+        - generic [ref=e89]: Analyze
+        - list "Analyze" [ref=e90]:
+          - listitem [ref=e91]:
+            - link "Reports" [ref=e92] [cursor=pointer]:
+              - /url: /reports
+          - listitem [ref=e96]:
+            - link "Activity" [ref=e97] [cursor=pointer]:
+              - /url: /activity
+          - listitem [ref=e101]:
+            - link "Audit log" [ref=e102] [cursor=pointer]:
+              - /url: /audit
+      - generic [ref=e107]:
+        - generic [ref=e108]: Admin
+        - list "Admin" [ref=e109]:
+          - listitem [ref=e110]:
+            - link "People" [ref=e111] [cursor=pointer]:
+              - /url: /staff
+          - listitem [ref=e125]:
+            - link "Workflows" [ref=e126] [cursor=pointer]:
+              - /url: /org/workflows
+          - listitem [ref=e132]:
+            - link "Forms" [ref=e133] [cursor=pointer]:
+              - /url: /form-builder
+          - listitem [ref=e138]:
+            - link "Settings" [ref=e139] [cursor=pointer]:
+              - /url: /settings
+    - button "Collapse sidebar" [expanded] [ref=e145] [cursor=pointer]:
+      - generic [ref=e149]: Collapse
+  - banner [ref=e150]:
+    - navigation "Breadcrumb" [ref=e151]:
+      - list [ref=e152]:
+        - listitem [ref=e153]:
+          - generic [ref=e154]: Monitor
+        - listitem [ref=e155]:
+          - text: /
+          - generic [ref=e156]: Command Center
+    - button "Search pages and commands (Ctrl K)" [ref=e157] [cursor=pointer]:
+      - generic [ref=e161]: Search
+      - generic [aria-hidden] [ref=e162]: Ctrl K
+    - 'button "Theme: Light" [ref=e163] [cursor=pointer]'
+    - button "Notifications" [ref=e170] [cursor=pointer]
+    - 'button "Account: david.onoja" [ref=e174] [cursor=pointer]':
+      - generic [aria-hidden] [ref=e175]: DA
+      - generic [aria-hidden] [ref=e176]:
+        - generic [ref=e177]: david.onoja
+        - generic [ref=e178]: Admin
+  - region "Network health" [ref=e179]:
+    - link "0 critical outages open" [ref=e180] [cursor=pointer]:
+      - /url: /outage?severity=critical
+      - generic [ref=e184]: –
+      - generic [ref=e185]: Critical
+    - link "0 high outages open" [ref=e186] [cursor=pointer]:
+      - /url: /outage?severity=high
+      - generic [ref=e190]: –
+      - generic [ref=e191]: High
+    - link "0 warning outages open" [ref=e192] [cursor=pointer]:
+      - /url: /outage?severity=warning
+      - generic [ref=e196]: –
+      - generic [ref=e197]: Warning
+    - link "0 low outages open" [ref=e198] [cursor=pointer]:
+      - /url: /outage?severity=low
+      - generic [ref=e202]: –
+      - generic [ref=e203]: Low
+    - link "– SLA at risk" [ref=e205] [cursor=pointer]:
+      - /url: /outage?view=sla
+      - generic [ref=e209]: –
+      - generic [ref=e210]: SLA at risk
+    - link "– On call" [ref=e212] [cursor=pointer]:
+      - /url: /shifts
+      - generic [ref=e217]: –
+      - generic [ref=e218]: On call
+    - generic [ref=e219]: Connecting…
+  - main [ref=e222]:
+    - status "Loading page" [ref=e223]

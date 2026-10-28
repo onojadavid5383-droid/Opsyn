@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Onboarding Request Approved — Opsyn</title>
+<style>
+  body{background:#050810;font-family:'Segoe UI',sans-serif;color:#e2e8f6;margin:0}
+  .wrap{max-width:520px;margin:40px auto;padding:0 20px}
+  .card{background:#080c18;border-radius:16px;border:1px solid rgba(74,222,128,.2);overflow:hidden}
+  .head{padding:28px 32px;background:linear-gradient(135deg,rgba(74,222,128,.06),rgba(6,182,212,.06));
+        border-bottom:1px solid rgba(74,222,128,.2);text-align:center}
+  .brand{font-size:18px;font-weight:800;background:linear-gradient(135deg,#4ade80,#06b6d4);
+         -webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .badge{display:inline-block;padding:6px 14px;border-radius:20px;background:rgba(74,222,128,.12);
+         color:#4ade80;font-size:12px;font-weight:700;letter-spacing:.06em;margin-top:10px}
+  .body{padding:28px 32px}
+  .title{font-size:18px;font-weight:700;color:#e2e8f6;margin-bottom:12px}
+  .msg{font-size:13px;color:#8b97b0;line-height:1.7}
+  .msg strong{color:#e2e8f6}
+  .info-box{background:#0c1220;border-radius:10px;padding:16px 20px;margin:20px 0;
+             border:1px solid rgba(74,222,128,.15)}
+  .info-row{display:flex;justify-content:space-between;padding:6px 0;
+            border-bottom:1px solid rgba(255,255,255,.06);font-size:12px}
+  .info-row:last-child{border-bottom:none}
+  .info-label{color:#4a5670}
+  .info-val{color:#e2e8f6;font-weight:500}
+  .foot{background:#0c1220;padding:14px;text-align:center;border-top:1px solid rgba(255,255,255,.06)}
+  .foot-t{font-size:10px;color:#2d3750;letter-spacing:.08em}
+</style>
+</head>
+<body>
+<div class="wrap"><div class="card">
+  <div class="head">
+    <div class="brand">Opsyn</div>
+    <div class="badge">✓ APPROVED</div>
+  </div>
+  <div class="body">
+    <div class="title">Onboarding request approved</div>
+    <div class="msg">
+      Your onboarding request has been approved by an administrator.
+      The account has been provisioned on Opsyn and an invite email has been dispatched
+      to the candidate.
+    </div>
+    <div class="info-box">
+      <div class="info-row"><span class="info-label">Candidate</span><span class="info-val">{{ candidate_name }}</span></div>
+      <div class="info-row"><span class="info-label">Proposed Role</span><span class="info-val">{{ proposed_role }}</span></div>
+      <div class="info-row"><span class="info-label">Department</span><span class="info-val">{{ department }}</span></div>
+      <div class="info-row"><span class="info-label">Status</span><span class="info-val" style="color:#4ade80">Account Active</span></div>
+    </div>
+    <div class="msg">
+      Log in to <strong>Opsyn</strong> to view the new staff member's profile and assign tasks.
+    </div>
+  </div>
+  <div class="foot"><div class="foot-t">OPSYN · POWERED BY SLIMTECH</div></div>
+</div></div>
+</body>
+</html>

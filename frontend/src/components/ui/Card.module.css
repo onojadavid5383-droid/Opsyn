@@ -1,0 +1,33 @@
+/* Card / Panel — a flat, solid work surface. Hierarchy comes from the
+   header and spacing, not from shadows or hover lifts. */
+
+.card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text-primary);
+}
+.elevated { box-shadow: var(--elevation-2); }
+.inset    { background: var(--surface-sunken); }
+.ghost    { background: transparent; border-color: transparent; }
+
+.clickable { cursor: pointer; transition: border-color var(--duration-fast) var(--ease-standard); }
+.clickable:hover { border-color: var(--border-strong); }
+.clickable:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+/* Accent: a 3px line — reserved for cards that represent a stateful thing */
+.accent { position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+
+.footer {
+  border-top: 1px solid var(--border);
+  background: var(--surface-sunken);
+}
+
+.skeletonLine {
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--surface-sunken) 25%, var(--border) 50%, var(--surface-sunken) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}

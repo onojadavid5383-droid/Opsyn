@@ -1,0 +1,52 @@
+/* OPSYN — task action dialogs (GlassModal body content). Solid inner
+   surfaces on the glass: the task preview and notices are for reading. */
+
+.stack { display: flex; flex-direction: column; gap: var(--space-3); }
+
+/* The task being acted on — always shown, so the action is never ambiguous */
+.preview {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+.previewRef { display: block; margin-bottom: 2px; font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-secondary); }
+
+.notice {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+.notice[data-tone='warning']  { border-color: transparent; background: var(--status-warning-bg);  color: var(--status-warning-fg); }
+.notice[data-tone='critical'] { border-color: transparent; background: var(--status-critical-bg); color: var(--status-critical-fg); }
+
+.text { font-size: var(--text-sm); line-height: 1.5; color: var(--text-secondary); }
+.text strong { color: var(--text-primary); }
+.mono { font-family: var(--font-mono); }
+
+/* Radio-card list (staff / department pickers) */
+.options { display: flex; flex-direction: column; gap: var(--space-1); max-height: 280px; overflow-y: auto; }
+.option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+}
+.option:hover { background: var(--surface-hover); }
+.option:has(input:checked) { border-color: var(--accent-text); background: var(--surface-selected); }
+.option input { accent-color: var(--accent-text); }
+.optionText { display: flex; flex-direction: column; min-width: 0; }
+.optionName { font-size: var(--text-sm); font-weight: var(--weight-medium); }
+.optionSub { font-size: var(--text-xs); color: var(--text-secondary); }
+.empty { padding: var(--space-4); text-align: center; font-size: var(--text-sm); color: var(--text-secondary); }

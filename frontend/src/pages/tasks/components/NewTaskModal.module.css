@@ -1,0 +1,175 @@
+.scope {
+  --scope-accent: var(--accent-text);
+  padding: 6px 2px 2px;
+}
+
+.scopeEyebrow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--chalk3);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .13em;
+}
+
+.scopeEyebrow > span:first-child {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--scope-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--scope-accent) 16%, transparent);
+}
+
+.step {
+  margin-left: auto;
+  color: var(--chalk4);
+  font-size: 9px;
+  letter-spacing: .08em;
+}
+
+.scopeTitle {
+  margin: 24px 0 8px;
+  color: var(--chalk);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(27px, 4vw, 34px);
+  font-weight: 500;
+  letter-spacing: -.035em;
+  line-height: 1.14;
+}
+
+.scopeDescription {
+  max-width: 490px;
+  margin: 0;
+  color: var(--chalk3);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.scopeOptions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 30px;
+}
+
+.scopeOption {
+  position: relative;
+  display: flex;
+  min-height: 148px;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 20px 18px;
+  border: 1px solid var(--wire2);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--chalk);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
+}
+
+.scopeOption:hover {
+  transform: translateY(-2px);
+  border-color: var(--scope-accent);
+  background: var(--surface-hover);
+}
+
+.scopeOption:focus-visible,
+.cancelButton:focus-visible {
+  outline: 2px solid var(--scope-accent);
+  outline-offset: 3px;
+}
+
+.scopeIcon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--brand-tint);
+  color: var(--scope-accent);
+}
+
+.scopeCopy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 7px;
+  padding-top: 2px;
+}
+
+.scopeLabel {
+  color: var(--chalk);
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -.015em;
+  line-height: 1.35;
+}
+
+.scopeSubtitle {
+  max-width: 230px;
+  color: var(--chalk3);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.scopeArrow {
+  flex: 0 0 auto;
+  margin: 3px 0 0 auto;
+  color: var(--chalk4);
+  transition: color 160ms ease, transform 160ms ease;
+}
+
+.scopeOption:hover .scopeArrow {
+  transform: translateX(3px);
+  color: var(--scope-accent);
+}
+
+.scopeFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 22px;
+  padding-top: 15px;
+  border-top: 1px solid var(--wire);
+  color: var(--chalk4);
+  font-size: 11px;
+}
+
+.cancelButton {
+  min-height: 38px;
+  padding: 0 17px;
+  border: 1px solid var(--wire2);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--chalk2);
+  cursor: pointer;
+  font: 600 12px var(--font);
+  transition: border-color 160ms ease, color 160ms ease, background-color 160ms ease;
+}
+
+.cancelButton:hover {
+  border-color: var(--wire3);
+  background: var(--bg3);
+  color: var(--chalk);
+}
+
+@media (max-width: 600px) {
+  .scope { padding-top: 0; }
+  .scopeTitle { margin-top: 20px; }
+  .scopeOptions { grid-template-columns: 1fr; gap: 9px; margin-top: 22px; }
+  .scopeOption { min-height: 112px; padding: 16px; }
+  .scopeFooter { margin-top: 17px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scopeOption,
+  .scopeArrow,
+  .cancelButton { transition: none; }
+  .scopeOption:hover,
+  .scopeOption:hover .scopeArrow { transform: none; }
+}

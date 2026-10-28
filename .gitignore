@@ -1,0 +1,51 @@
+# ── Environment & Secrets ────────────────────────────────────
+.env
+.env.local
+.env.production
+.env.*.local
+ssl/*.crt
+ssl/*.key
+ssl/*.pem
+
+# ── Python ───────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+celerybeat-schedule
+celerybeat.pid
+
+# ── Node / Frontend ───────────────────────────────────────────
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+
+# ── Docker ───────────────────────────────────────────────────
+.docker/
+
+# ── IDE ───────────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# ── OS ───────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Claude Code local settings ───────────────────────────────
+.claude/settings.local.json
+
+# ── Alembic / local scratch ──────────────────────────────────
+*.log
+.coverage
+htmlcov/

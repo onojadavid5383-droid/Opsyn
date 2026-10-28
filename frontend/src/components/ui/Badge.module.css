@@ -1,0 +1,47 @@
+/* Badge — a text label with a tone. The text always carries the meaning;
+   the tone reinforces it. */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-weight: var(--weight-medium);
+  line-height: 1.35;
+  white-space: nowrap;
+  color: var(--tone-fg);
+  background: var(--tone-bg);
+  border-color: color-mix(in srgb, var(--tone-fg) 22%, transparent);
+}
+.xs { padding: 0 6px;  font-size: var(--text-2xs); }
+.sm { padding: 1px 8px; font-size: var(--text-xs); }
+.md { padding: 2px 10px; font-size: var(--text-sm); }
+
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--tone-dot, var(--tone-fg)); flex-shrink: 0; }
+
+/* Tones */
+.critical { --tone-fg: var(--status-critical-fg); --tone-bg: var(--status-critical-bg); }
+.high     { --tone-fg: var(--status-high-fg);     --tone-bg: var(--status-high-bg); }
+.warning  { --tone-fg: var(--status-warning-fg);  --tone-bg: var(--status-warning-bg); }
+.info     { --tone-fg: var(--status-low-fg);      --tone-bg: var(--status-low-bg); }
+.ok       { --tone-fg: var(--status-ok-fg);       --tone-bg: var(--status-ok-bg); }
+.neutral  { --tone-fg: var(--text-secondary);     --tone-bg: var(--surface-sunken); }
+.brand    { --tone-fg: var(--accent-text);        --tone-bg: var(--brand-tint); }
+.review   { --tone-fg: var(--state-review);       --tone-bg: color-mix(in srgb, var(--state-review) 10%, transparent); }
+.progress { --tone-fg: var(--state-progress);     --tone-bg: color-mix(in srgb, var(--state-progress) 10%, transparent); }
+.primary  { --tone-fg: var(--brand-contrast);     --tone-bg: var(--brand); border-color: transparent; }
+
+/* Neutral pill with a coloured dot — workflow state (StateBadge) */
+.state {
+  --tone-fg: var(--text-primary);
+  --tone-bg: var(--surface-sunken);
+  border-color: var(--border);
+  border-radius: var(--radius-full);
+}
+
+@media (forced-colors: active) {
+  .badge { border-color: CanvasText; }
+  .dot { background: CanvasText; }
+}

@@ -1,0 +1,16 @@
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--text-secondary);
+}
+.sm { padding: var(--space-6) var(--space-4); }
+.md { padding: var(--space-10) var(--space-6); }
+.lg { padding: var(--space-12) var(--space-8); }
+
+.icon { margin-bottom: var(--space-3); color: var(--text-muted); }
+.title { font-size: var(--text-md); font-weight: var(--weight-semibold); color: var(--text-primary); }
+.lg .title { font-size: var(--text-lg); }
+.message { max-width: 44ch; margin-top: var(--space-1); font-size: var(--text-sm); line-height: var(--leading-body); }

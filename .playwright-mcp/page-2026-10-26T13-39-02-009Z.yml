@@ -1,0 +1,149 @@
+- generic [ref=f4e3]:
+  - link "Skip to content" [ref=f4e517] [cursor=pointer]:
+    - /url: "#main"
+  - complementary "Primary" [ref=f4e518]:
+    - link "OpSyn — Command Center" [ref=f4e519] [cursor=pointer]:
+      - /url: /dashboard
+      - img "Opsyn logo mark" [ref=f4e520]
+      - generic [ref=f4e17]: OpSyn
+    - navigation "Main" [ref=f4e521]:
+      - generic [ref=f4e19]:
+        - generic [ref=f4e20]: Monitor
+        - list "Monitor" [ref=f4e522]:
+          - listitem [ref=f4e22]:
+            - link "Command Center" [ref=f4e523] [cursor=pointer]:
+              - /url: /dashboard
+          - listitem [ref=f4e30]:
+            - link "Alarms & outages" [ref=f4e524] [cursor=pointer]:
+              - /url: /outage
+          - listitem [ref=f4e38]:
+            - link "Network map" [ref=f4e525] [cursor=pointer]:
+              - /url: /network
+      - generic [ref=f4e43]:
+        - generic [ref=f4e44]: Operate
+        - list "Operate" [ref=f4e526]:
+          - listitem [ref=f4e46]:
+            - link "Tasks" [ref=f4e527] [cursor=pointer]:
+              - /url: /tasks
+          - listitem [ref=f4e52]:
+            - link "Projects" [ref=f4e528] [cursor=pointer]:
+              - /url: /projects
+          - listitem [ref=f4e57]:
+            - link "Shifts" [ref=f4e529] [cursor=pointer]:
+              - /url: /shifts
+          - listitem [ref=f4e64]:
+            - link "Customers" [ref=f4e530] [cursor=pointer]:
+              - /url: /customers
+      - generic [ref=f4e71]:
+        - generic [ref=f4e72]: Engineer
+        - list "Engineer" [ref=f4e531]:
+          - listitem [ref=f4e74]:
+            - link "Infrastructure" [ref=f4e532] [cursor=pointer]:
+              - /url: /infrastructure
+          - listitem [ref=f4e80]:
+            - link "FTTx Designer" [ref=f4e533] [cursor=pointer]:
+              - /url: /fttx-designer
+      - generic [ref=f4e88]:
+        - generic [ref=f4e89]: Analyze
+        - list "Analyze" [ref=f4e534]:
+          - listitem [ref=f4e91]:
+            - link "Reports" [ref=f4e535] [cursor=pointer]:
+              - /url: /reports
+          - listitem [ref=f4e96]:
+            - link "Activity" [ref=f4e536] [cursor=pointer]:
+              - /url: /activity
+          - listitem [ref=f4e101]:
+            - link "Audit log" [ref=f4e537] [cursor=pointer]:
+              - /url: /audit
+      - generic [ref=f4e107]:
+        - generic [ref=f4e108]: Admin
+        - list "Admin" [ref=f4e538]:
+          - listitem [ref=f4e110]:
+            - link "People" [ref=f4e539] [cursor=pointer]:
+              - /url: /staff
+          - listitem [ref=f4e125]:
+            - link "Workflows" [ref=f4e540] [cursor=pointer]:
+              - /url: /org/workflows
+          - listitem [ref=f4e132]:
+            - link "Forms" [ref=f4e541] [cursor=pointer]:
+              - /url: /form-builder
+          - listitem [ref=f4e138]:
+            - link "Settings" [ref=f4e542] [cursor=pointer]:
+              - /url: /settings
+    - button "Collapse sidebar" [expanded] [ref=f4e543] [cursor=pointer]:
+      - generic [ref=f4e149]: Collapse
+  - banner [ref=f4e150]:
+    - navigation "Breadcrumb" [ref=f4e544]:
+      - list [ref=f4e152]:
+        - listitem [ref=f4e153]:
+          - generic [ref=f4e154]: Admin
+        - listitem [ref=f4e155]:
+          - text: /
+          - link "Forms" [ref=f4e545] [cursor=pointer]:
+            - /url: /form-builder
+        - listitem [ref=f4e596]:
+          - text: /
+          - generic [ref=f4e597]: Details
+        - listitem [ref=f4e157]:
+          - text: /
+          - generic [ref=f4e158]: Preview
+    - button "Search pages and commands (Ctrl K)" [ref=f4e546] [cursor=pointer]:
+      - generic [ref=f4e163]: Search
+      - generic [aria-hidden] [ref=f4e164]: Ctrl K
+    - 'button "Theme: Light" [ref=f4e547] [cursor=pointer]'
+    - button "Notifications" [ref=f4e548] [cursor=pointer]
+    - 'button "Account: david.onoja" [ref=f4e549] [cursor=pointer]':
+      - generic [aria-hidden] [ref=f4e177]: DA
+      - generic [aria-hidden] [ref=f4e178]:
+        - generic [ref=f4e179]: david.onoja
+        - generic [ref=f4e180]: Admin
+  - region "Network health" [ref=f4e550]:
+    - link "0 critical outages open" [ref=f4e551] [cursor=pointer]:
+      - /url: /outage?severity=critical
+      - generic [ref=f4e186]: "0"
+      - generic [ref=f4e187]: Critical
+    - link "0 high outages open" [ref=f4e552] [cursor=pointer]:
+      - /url: /outage?severity=high
+      - generic [ref=f4e192]: "0"
+      - generic [ref=f4e193]: High
+    - link "0 warning outages open" [ref=f4e553] [cursor=pointer]:
+      - /url: /outage?severity=warning
+      - generic [ref=f4e198]: "0"
+      - generic [ref=f4e199]: Warning
+    - link "0 low outages open" [ref=f4e554] [cursor=pointer]:
+      - /url: /outage?severity=low
+      - generic [ref=f4e204]: "0"
+      - generic [ref=f4e205]: Low
+    - link "0 SLA at risk" [ref=f4e555] [cursor=pointer]:
+      - /url: /outage?view=sla
+      - generic [ref=f4e211]: "0"
+      - generic [ref=f4e212]: SLA at risk
+    - link "2 On call" [ref=f4e556] [cursor=pointer]:
+      - /url: /shifts
+      - generic [ref=f4e219]: "2"
+      - generic [ref=f4e220]: On call
+    - generic [ref=f4e221]: Updated 14:38
+  - main [ref=f4e224]:
+    - generic [ref=f4e598]:
+      - generic [ref=f4e599]:
+        - button "← Builder" [ref=f4e600] [cursor=pointer]
+        - generic [ref=f4e601]: Preview & Test
+        - button "View Submissions →" [ref=f4e602] [cursor=pointer]
+      - generic [ref=f4e604]:
+        - generic [ref=f4e606]:
+          - generic [ref=f4e607]:
+            - generic [ref=f4e608]: Playwright QA 2026-10-26 1328
+            - generic [ref=f4e609]: Temporary end-to-end test schema
+          - generic [ref=f4e610]:
+            - generic [ref=f4e611]:
+              - generic [ref=f4e612]: Contact Email*
+              - textbox [ref=f4e613]: playwright-e2e-20261026@example.invalid
+            - generic [ref=f4e614]:
+              - generic [ref=f4e615]: Asset Name*
+              - textbox [ref=f4e616]: PW Asset QA 20261026-1338
+          - generic [ref=f4e617]:
+            - button "Validate" [ref=f4e618] [cursor=pointer]
+            - button "Save Draft" [ref=f4e619] [cursor=pointer]
+            - button "Cancel" [ref=f4e620] [cursor=pointer]
+            - button "Submit" [ref=f4e621] [cursor=pointer]
+        - generic [ref=f4e622]: Preview mode — submissions are real and will appear in the submissions log

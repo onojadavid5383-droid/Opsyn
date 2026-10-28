@@ -1,0 +1,120 @@
+.configGroup {
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.groupToggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.groupToggle:hover { color: var(--accent-text); }
+.groupToggle:focus-visible { border-radius: var(--radius-sm); outline: 2px solid var(--accent-text); outline-offset: 3px; }
+.groupChevron, .groupChevronExpanded { flex: 0 0 auto; color: var(--text-secondary); transition: transform 140ms ease; }
+.groupChevron { transform: rotate(-90deg); }
+.groupChevronExpanded { transform: rotate(0); }
+.groupContent[hidden] { display: none; }
+
+.routeField {
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.routeField legend {
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.routeOptions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.routeOption {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 66px;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-sunken);
+  cursor: pointer;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.routeOption[data-selected='true'] {
+  border-color: var(--brand);
+  background: var(--surface-selected);
+}
+
+.routeOption input {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  margin: 2px 0 0;
+  accent-color: var(--brand);
+}
+
+.routeOption span {
+  display: grid;
+  gap: 3px;
+}
+
+.routeOption strong {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.routeOption small {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+.routeOption:focus-within {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.routeField:disabled .routeOption {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.routeNote {
+  margin: 7px 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+@media (max-width: 600px) {
+  .routeOptions {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .routeOption {
+    transition: none;
+  }
+}

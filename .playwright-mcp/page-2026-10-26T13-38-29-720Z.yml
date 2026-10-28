@@ -1,0 +1,258 @@
+- generic [ref=f4e1]:
+  - generic [ref=f4e3]:
+    - link [ref=f4e418] [cursor=pointer]:
+      - /url: "#main"
+      - text: Skip to content
+    - complementary [ref=f4e419]:
+      - link [ref=f4e420] [cursor=pointer]:
+        - /url: /dashboard
+        - generic [ref=f4e17]: OpSyn
+      - navigation [ref=f4e422]:
+        - generic [ref=f4e19]:
+          - generic [ref=f4e20]: Monitor
+          - list [ref=f4e423]:
+            - listitem [ref=f4e22]:
+              - link [ref=f4e424] [cursor=pointer]:
+                - /url: /dashboard
+                - generic [ref=f4e29]: Command Center
+            - listitem [ref=f4e30]:
+              - link [ref=f4e425] [cursor=pointer]:
+                - /url: /outage
+                - generic [ref=f4e37]: Alarms & outages
+            - listitem [ref=f4e38]:
+              - link [ref=f4e426] [cursor=pointer]:
+                - /url: /network
+                - generic [ref=f4e42]: Network map
+        - generic [ref=f4e43]:
+          - generic [ref=f4e44]: Operate
+          - list [ref=f4e427]:
+            - listitem [ref=f4e46]:
+              - link [ref=f4e428] [cursor=pointer]:
+                - /url: /tasks
+                - generic [ref=f4e51]: Tasks
+            - listitem [ref=f4e52]:
+              - link [ref=f4e429] [cursor=pointer]:
+                - /url: /projects
+                - generic [ref=f4e56]: Projects
+            - listitem [ref=f4e57]:
+              - link [ref=f4e430] [cursor=pointer]:
+                - /url: /shifts
+                - generic [ref=f4e63]: Shifts
+            - listitem [ref=f4e64]:
+              - link [ref=f4e431] [cursor=pointer]:
+                - /url: /customers
+                - generic [ref=f4e70]: Customers
+        - generic [ref=f4e71]:
+          - generic [ref=f4e72]: Engineer
+          - list [ref=f4e432]:
+            - listitem [ref=f4e74]:
+              - link [ref=f4e433] [cursor=pointer]:
+                - /url: /infrastructure
+                - generic [ref=f4e79]: Infrastructure
+            - listitem [ref=f4e80]:
+              - link [ref=f4e434] [cursor=pointer]:
+                - /url: /fttx-designer
+                - generic [ref=f4e87]: FTTx Designer
+        - generic [ref=f4e88]:
+          - generic [ref=f4e89]: Analyze
+          - list [ref=f4e435]:
+            - listitem [ref=f4e91]:
+              - link [ref=f4e436] [cursor=pointer]:
+                - /url: /reports
+                - generic [ref=f4e95]: Reports
+            - listitem [ref=f4e96]:
+              - link [ref=f4e437] [cursor=pointer]:
+                - /url: /activity
+                - generic [ref=f4e100]: Activity
+            - listitem [ref=f4e101]:
+              - link [ref=f4e438] [cursor=pointer]:
+                - /url: /audit
+                - generic [ref=f4e106]: Audit log
+        - generic [ref=f4e107]:
+          - generic [ref=f4e108]: Admin
+          - list [ref=f4e439]:
+            - listitem [ref=f4e110]:
+              - link [ref=f4e440] [cursor=pointer]:
+                - /url: /staff
+                - generic [ref=f4e124]: People
+            - listitem [ref=f4e125]:
+              - link [ref=f4e441] [cursor=pointer]:
+                - /url: /org/workflows
+                - generic [ref=f4e131]: Workflows
+            - listitem [ref=f4e132]:
+              - link [ref=f4e442] [cursor=pointer]:
+                - /url: /form-builder
+                - generic [ref=f4e137]: Forms
+            - listitem [ref=f4e138]:
+              - link [ref=f4e443] [cursor=pointer]:
+                - /url: /settings
+                - generic [ref=f4e143]: Settings
+      - button [expanded] [ref=f4e444] [cursor=pointer]:
+        - generic [ref=f4e149]: Collapse
+    - banner [ref=f4e150]:
+      - navigation [ref=f4e445]:
+        - list [ref=f4e152]:
+          - listitem [ref=f4e153]:
+            - generic [ref=f4e154]: Admin
+          - listitem [ref=f4e155]:
+            - text: /
+            - link [ref=f4e446] [cursor=pointer]:
+              - /url: /form-builder
+              - text: Forms
+          - listitem [ref=f4e157]:
+            - text: /
+            - generic [ref=f4e158]: Details
+      - button [ref=f4e447] [cursor=pointer]:
+        - generic [ref=f4e163]: Search
+        - generic [aria-hidden] [ref=f4e164]: Ctrl K
+      - button [ref=f4e448] [cursor=pointer]
+      - button [ref=f4e449] [cursor=pointer]
+      - button [ref=f4e450] [cursor=pointer]:
+        - generic [aria-hidden] [ref=f4e177]: DA
+        - generic [aria-hidden] [ref=f4e178]:
+          - generic [ref=f4e179]: david.onoja
+          - generic [ref=f4e180]: Admin
+    - region [ref=f4e451]:
+      - link [ref=f4e452] [cursor=pointer]:
+        - /url: /outage?severity=critical
+        - generic [ref=f4e186]: "0"
+        - generic [ref=f4e187]: Critical
+      - link [ref=f4e453] [cursor=pointer]:
+        - /url: /outage?severity=high
+        - generic [ref=f4e192]: "0"
+        - generic [ref=f4e193]: High
+      - link [ref=f4e454] [cursor=pointer]:
+        - /url: /outage?severity=warning
+        - generic [ref=f4e198]: "0"
+        - generic [ref=f4e199]: Warning
+      - link [ref=f4e455] [cursor=pointer]:
+        - /url: /outage?severity=low
+        - generic [ref=f4e204]: "0"
+        - generic [ref=f4e205]: Low
+      - link [ref=f4e456] [cursor=pointer]:
+        - /url: /outage?view=sla
+        - generic [ref=f4e211]: "0"
+        - generic [ref=f4e212]: SLA at risk
+      - link [ref=f4e457] [cursor=pointer]:
+        - /url: /shifts
+        - generic [ref=f4e219]: "2"
+        - generic [ref=f4e220]: On call
+      - generic [ref=f4e221]: Updated 14:38
+    - main [ref=f4e224]:
+      - generic [ref=f4e229]:
+        - heading [level=1] [ref=f4e458]: Form builder
+        - generic [ref=f4e231]:
+          - generic [ref=f4e232]: Form Builder
+          - combobox [ref=f4e459] [cursor=pointer]:
+            - generic [ref=f4e235]: Playwright QA 2026-10-26 1328
+          - generic [ref=f4e238]: draft
+          - button [ref=f4e460] [cursor=pointer]: Associations
+          - button [ref=f4e461] [cursor=pointer]: Publish
+          - button [ref=f4e462] [cursor=pointer]: Archive
+          - button [ref=f4e463] [cursor=pointer]: + New Schema
+        - generic [ref=f4e243]:
+          - generic [ref=f4e244]: "2"
+          - generic [ref=f4e245]: pending table changes — 2 columns to add
+          - button [ref=f4e464] [cursor=pointer]: Review & apply
+        - generic [ref=f4e247]:
+          - generic [ref=f4e248]:
+            - generic [ref=f4e249]: Field Types
+            - generic [ref=f4e250]:
+              - generic [ref=f4e251]: Basic
+              - button [ref=f4e465] [cursor=pointer]:
+                - generic [ref=f4e256]: Short Text
+              - button [ref=f4e466] [cursor=pointer]:
+                - generic [ref=f4e261]: Long Text
+              - button [ref=f4e467] [cursor=pointer]:
+                - generic [ref=f4e266]: Integer
+              - button [ref=f4e468] [cursor=pointer]:
+                - generic [ref=f4e271]: Decimal Number
+              - button [ref=f4e469] [cursor=pointer]:
+                - generic [ref=f4e276]: Yes / No
+              - button [ref=f4e470] [cursor=pointer]:
+                - generic [ref=f4e281]: Date
+              - button [ref=f4e471] [cursor=pointer]:
+                - generic [ref=f4e286]: Date & Time
+              - button [ref=f4e472] [cursor=pointer]:
+                - generic [ref=f4e291]: Time
+              - button [ref=f4e473] [cursor=pointer]:
+                - generic [ref=f4e296]: Email Address
+              - button [ref=f4e474] [cursor=pointer]:
+                - generic [ref=f4e301]: Phone Number
+              - button [ref=f4e475] [cursor=pointer]:
+                - generic [ref=f4e306]: URL
+            - generic [ref=f4e307]:
+              - generic [ref=f4e308]: Choice
+              - button [ref=f4e476] [cursor=pointer]:
+                - generic [ref=f4e313]: Dropdown
+              - button [ref=f4e477] [cursor=pointer]:
+                - generic [ref=f4e318]: Multi-Select
+              - button [ref=f4e478] [cursor=pointer]:
+                - generic [ref=f4e323]: Radio Buttons
+            - generic [ref=f4e324]:
+              - generic [ref=f4e325]: Media
+              - button [ref=f4e479] [cursor=pointer]:
+                - generic [ref=f4e330]: File Upload
+              - button [ref=f4e480] [cursor=pointer]:
+                - generic [ref=f4e335]: Image Upload
+              - button [ref=f4e481] [cursor=pointer]:
+                - generic [ref=f4e340]: Signature
+            - generic [ref=f4e341]:
+              - generic [ref=f4e342]: Structured
+              - button [ref=f4e482] [cursor=pointer]:
+                - generic [ref=f4e347]: GPS Coordinates
+              - button [ref=f4e483] [cursor=pointer]:
+                - generic [ref=f4e352]: Address
+              - button [ref=f4e484] [cursor=pointer]:
+                - generic [ref=f4e357]: Currency Amount
+              - button [ref=f4e485] [cursor=pointer]:
+                - generic [ref=f4e362]: Star Rating
+            - generic [ref=f4e363]:
+              - generic [ref=f4e364]: Advanced
+              - button [ref=f4e486] [cursor=pointer]:
+                - generic [ref=f4e369]: Lookup
+              - button [ref=f4e487] [cursor=pointer]:
+                - generic [ref=f4e374]: Computed (Read-only)
+            - generic [ref=f4e375]:
+              - generic [ref=f4e376]: Layout
+              - button [ref=f4e488] [cursor=pointer]:
+                - generic [ref=f4e381]: Section Header
+          - generic [ref=f4e383]:
+            - generic [ref=f4e384]:
+              - generic [ref=f4e385]: Playwright QA 2026-10-26 1328
+              - generic [ref=f4e386]: v0 · generic · 2 fieldspw_qa_20261026_1328
+            - generic [ref=f4e387]:
+              - generic [ref=f4e388] [cursor=pointer]:
+                - generic [ref=f4e389]:
+                  - button [disabled] [ref=f4e489]: ▲
+                  - button [ref=f4e490]: ▼
+                - generic [ref=f4e395]:
+                  - generic [ref=f4e396]: Contact Email*
+                  - generic [ref=f4e397]: email_m6cu8 · email
+                - generic [ref=f4e398]: full
+                - button [ref=f4e491]: ✕
+              - generic [ref=f4e401] [cursor=pointer]:
+                - generic [ref=f4e402]:
+                  - button [ref=f4e492]: ▲
+                  - button [disabled] [ref=f4e493]: ▼
+                - generic [ref=f4e408]:
+                  - generic [ref=f4e409]: Asset Name*
+                  - generic [ref=f4e410]: string_4lvm8 · string
+                - generic [ref=f4e411]: full
+                - button [ref=f4e494]: ✕
+          - generic [ref=f4e415]: Select a field to configure
+  - dialog [ref=f4e497]:
+    - banner [ref=f4e498]:
+      - heading "Publish Schema" [level=2] [ref=f4e500]
+      - button "Close" [active] [ref=f4e501] [cursor=pointer]
+    - generic [ref=f4e507]:
+      - paragraph [ref=f4e508]:
+        - text: Publishing creates an
+        - strong [ref=f4e509]: immutable version snapshot
+        - text: of the current field set. You can continue editing and re-publish to create future versions.
+      - generic [ref=f4e510]:
+        - generic [ref=f4e511]: Changelog (optional)
+        - textbox "e.g. Added email verification field" [ref=f4e512]
+      - generic [ref=f4e513]:
+        - button "Cancel" [ref=f4e514] [cursor=pointer]
+        - button "Publish Schema" [ref=f4e515] [cursor=pointer]

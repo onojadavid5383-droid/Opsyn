@@ -1,0 +1,11 @@
+/* OPSYN — Customers */
+.stackCell { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.name { font-weight: var(--weight-medium); }
+.sub { font-size: var(--text-xs); color: var(--text-secondary); }
+.mono { font-family: var(--font-mono); }
+.pager { display: flex; align-items: center; justify-content: center; gap: var(--space-3); }
+
+.form { display: flex; flex-direction: column; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--space-3); }
+.row3 { display: grid; grid-template-columns: 1.4fr 1fr 0.8fr; gap: 0 var(--space-3); }
+@media (max-width: 560px) { .row2, .row3 { grid-template-columns: 1fr; } }

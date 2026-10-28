@@ -1,0 +1,1002 @@
+OPSYN PLATFORM
+Infrastructure Management Enhancement
+Implementation Plan
+Module: Fiber ISP — FTTH Network Asset Management
+Covers: Splitter Boxes | Cabinets | OLTs | Cable Routes
+Version: 1.0  |  Date: May 2026
+1. Executive Summary & Brainstorm Analysis
+This document defines the complete implementation plan for the Opsyn Infrastructure Management Enhancement — specifically the ability to bulk-import, manage, and delete existing FTTH network assets including Splitter Boxes, Cabinets, OLTs, and Cable Routes within the multi-tenant Opsyn platform.
+1.1 What This Module Must Achieve
+Allow network operations teams to migrate existing deployed infrastructure into the platform via structured Excel uploads.
+Support real-world FTTH telecom hierarchy — First-Level splitters (typically 1:8 or 1:16) feed Second-Level splitters (1:8 or 1:16), which feed customer ONUs. The system must model this hierarchy correctly and validate it.
+Enforce a strict two-phase upload workflow: validate first, show a full preview report, then require explicit user approval before any data is committed to the database.
+Provide batch deletion with the same two-phase approval gate — preventing accidental mass deletion.
+Maintain a full audit trail of every upload and deletion action, consistent with the existing Opsyn audit log patterns.
+Retain all existing Cable Routes upload logic unchanged; new asset types are additive.
+1.2 System Context & Inherited Constraints
+This module is built on top of the existing Opsyn backend and must respect the following established patterns from the development log:
+Constraint
+Source
+Impact on This Module
+User display names resolve via user.staff_profile.full_name
+Dev Log — AttributeError fix
+All audit log actor_label fields must use the three-level fallback pattern, never user.full_name
+Router registration order matters in main.py
+Dev Log — route collision fix
+infrastructure_router must be registered before any catch-all routers
+ErrorBoundary wraps all page-level React components
+Dev Log — blank page fix
+All new upload pages, preview modals, and deletion pages must use the existing ErrorBoundary
+Timeline/activity entries use TimelineEntry interface
+Dev Log — timeline format
+Upload and deletion events logged to activity feed must conform to this interface
+GIS geometry created via PostGIS ST_MakePoint/ST_SetSRID
+Existing codebase
+Lat/lng from Excel → ST_SetSRID(ST_MakePoint(lng, lat), 4326) for all new asset tables
+Multi-tenant: tenant_id on every table
+Architecture
+All infrastructure tables carry tenant_id; all queries filter by it
+Async SQLAlchemy requires explicit selectinload chains
+Dev Log — lazy-load fix
+Any query joining User → StaffProfile must chain .selectinload(User.staff_profile)
+Soft delete pattern (is_deleted flag)
+Existing pattern
+Infrastructure assets use is_deleted=True rather than hard DELETE where applicable
+1.3 Key Design Decisions from Brainstorm
+Staging Table Pattern for Upload Safety
+The two-phase workflow (validate → approve → commit) is best implemented using a staging table approach. Validated rows are written to infrastructure_upload_staging with a session_id. The user reviews the staging rows, approves, and the commit step moves them to the live tables atomically. This means no partially-committed uploads are possible — a rollback deletes the staging rows.
+Splitter Hierarchy as a Self-Referential Relationship
+The splitter_level field (First-Level or Second-Level) is not just metadata — it implies a structural relationship in the FTTH network. The database design must support a nullable parent_splitter_id on the splitter table, allowing a Second-Level splitter to be linked to its upstream First-Level splitter. This linkage is optional at upload time (existing infrastructure may not have this data) but the schema must support it for future use.
+Deletion Uses box_id + splitter_level as Composite Key
+The deletion spec requires matching on both box_id and splitter_level. This is intentional — the same box_id may theoretically exist at different levels in a network expansion scenario. The composite (box_id, splitter_level, tenant_id) forms the effective unique key for deletion matching.
+Upload Sessions as First-Class Records
+Every upload attempt — successful or not — is recorded in an infrastructure_upload_sessions table (analogous to external_task_logs in the existing system). This enables upload history, replay, and audit. Each session has a status: pending | validated | approved | committed | failed | rolled_back.
+Error Report as Downloadable Excel
+Validation errors are exported as a downloadable .xlsx file mirroring the input format with an extra Errors column. This allows operators to fix their source file and re-upload without manually identifying which rows failed.
+2. Architecture Overview
+2.1 Module Structure
+The infrastructure management module lives at:
+backend/app/modules/infrastructure/
+With the following sub-files:
+router.py — all infrastructure API endpoints
+models.py — ORM models for all asset types + upload sessions
+schemas.py — Pydantic request/response schemas
+upload_service.py — Excel parsing, validation engine, staging logic
+deletion_service.py — batch deletion logic, validation, audit
+audit_service.py — shared audit log writer
+gis_utils.py — coordinate validation and PostGIS point generation
+2.2 Infrastructure Asset Hierarchy
+The FTTH network asset hierarchy supported by this module:
+OLT  (Optical Line Terminal)
+  └── Cabinet  (Optical Distribution Frame / Splice Box)
+        └── First-Level Splitter Box  (1:8 or 1:16, PCC or Legacy)
+              └── Second-Level Splitter Box  (1:8 or 1:16, PCC or Legacy)
+                    └── Customer ONU / ONT
+  Cable Routes connect all of the above via fiber paths
+2.3 Upload Workflow State Machine
+State
+Description
+Triggered By
+PENDING
+Session created, file received, not yet validated
+POST /upload (file receipt)
+VALIDATING
+Background validation job running
+Auto after file receipt
+VALIDATED
+Validation complete — rows in staging table, errors computed
+Validation job completion
+APPROVED
+User confirmed the upload on the preview screen
+POST /upload/{session_id}/approve
+COMMITTING
+Atomic DB transaction moving staging → live tables
+Auto after approval
+COMMITTED
+All rows in live tables, staging rows cleaned up
+Transaction commit
+FAILED
+Validation or commit error — no data written
+Error in any stage
+ROLLED_BACK
+User rejected the preview or explicit rollback
+POST /upload/{session_id}/reject
+No live table receives data until the COMMITTING state begins. Rejection or failure at any state before COMMITTING leaves all live tables untouched.
+3. Database Design
+3.1 Design Principles
+All tables: id (UUID PK), tenant_id (FK), created_at, updated_at, is_deleted (soft delete), created_by (FK → users.id).
+GIS columns use PostGIS geometry(Point, 4326). Auto-generated via ST_SetSRID(ST_MakePoint(longitude, latitude), 4326).
+Unique constraints are composite with tenant_id — e.g., UNIQUE(box_id, tenant_id) for splitters.
+All JSONB columns (validation_errors, upload_payload) have GIN indexes.
+Upload session tables follow the same pattern as external_task_logs in the existing system.
+3.2 Core Asset Tables
+splitter_boxes
+Column
+Type
+Constraints
+Description
+id
+UUID
+PK
+Auto-generated primary key
+tenant_id
+UUID
+FK tenants, NOT NULL
+Tenant isolation
+box_id
+VARCHAR(100)
+NOT NULL
+Splitter box identifier from field
+input_ports
+SMALLINT
+NOT NULL, >=1
+Number of input ports
+output_ports
+SMALLINT
+NOT NULL, >=1
+Number of output ports
+splitter_level
+VARCHAR(20)
+NOT NULL, CHECK IN ('First-Level','Second-Level')
+Hierarchy level enum
+splitter_type
+VARCHAR(20)
+NOT NULL, CHECK IN ('PCC','Legacy')
+Equipment type enum
+number_customer
+INTEGER
+NULLABLE, >=0
+Connected customer count
+longitude
+DOUBLE PRECISION
+NOT NULL
+Raw longitude stored for reference
+latitude
+DOUBLE PRECISION
+NOT NULL
+Raw latitude stored for reference
+location
+geometry(Point,4326)
+NOT NULL
+PostGIS point auto-generated
+parent_splitter_id
+UUID
+FK splitter_boxes.id, NULLABLE
+First-Level parent of a Second-Level splitter
+cabinet_id
+UUID
+FK cabinets.id, NULLABLE
+Cabinet this splitter belongs to
+is_deleted
+BOOLEAN
+DEFAULT FALSE
+Soft delete flag
+created_by
+UUID
+FK users.id
+Uploader user ID
+upload_session_id
+UUID
+FK infrastructure_upload_sessions.id
+Originating upload session
+UNIQUE constraint: (box_id, tenant_id) WHERE is_deleted = FALSE — allows re-uploading after soft delete.
+cabinets
+Column
+Type
+Constraints
+Description
+id
+UUID
+PK
+Primary key
+tenant_id
+UUID
+FK, NOT NULL
+Tenant isolation
+cabinet_id
+VARCHAR(100)
+NOT NULL
+Cabinet identifier
+capacity
+INTEGER
+NOT NULL, >0
+Cabinet capacity
+number_tray
+SMALLINT
+NOT NULL, >=0
+Number of trays
+longitude
+DOUBLE PRECISION
+NOT NULL
+Raw longitude
+latitude
+DOUBLE PRECISION
+NOT NULL
+Raw latitude
+location
+geometry(Point,4326)
+NOT NULL
+PostGIS point
+is_deleted
+BOOLEAN
+DEFAULT FALSE
+Soft delete
+created_by
+UUID
+FK users.id
+Uploader
+upload_session_id
+UUID
+FK upload_sessions
+Origin session
+UNIQUE: (cabinet_id, tenant_id) WHERE is_deleted = FALSE
+olts
+Column
+Type
+Constraints
+Description
+id
+UUID
+PK
+Primary key
+tenant_id
+UUID
+FK, NOT NULL
+Tenant isolation
+name
+VARCHAR(200)
+NOT NULL
+OLT name
+location_description
+TEXT
+NOT NULL
+Physical location text
+number_of_odf
+SMALLINT
+NULLABLE, >=0
+ODF port count
+longitude
+DOUBLE PRECISION
+NOT NULL
+Raw longitude
+latitude
+DOUBLE PRECISION
+NOT NULL
+Raw latitude
+location
+geometry(Point,4326)
+NOT NULL
+PostGIS point
+is_deleted
+BOOLEAN
+DEFAULT FALSE
+Soft delete
+created_by
+UUID
+FK users.id
+Uploader
+upload_session_id
+UUID
+FK upload_sessions
+Origin session
+UNIQUE: (name, tenant_id) WHERE is_deleted = FALSE
+3.3 Upload Infrastructure Tables
+infrastructure_upload_sessions
+Column
+Type
+Description
+id
+UUID PK
+Session identifier
+tenant_id
+UUID
+Tenant scoping
+asset_type
+VARCHAR(30)
+'splitter' | 'cabinet' | 'olt' | 'cable_route'
+status
+VARCHAR(20)
+pending | validated | approved | committed | failed | rolled_back
+original_filename
+VARCHAR(500)
+Name of uploaded file
+file_hash
+VARCHAR(64)
+SHA-256 of file bytes — detects re-uploads
+total_rows
+INTEGER
+Total data rows in file
+valid_rows
+INTEGER
+Rows that passed validation
+duplicate_rows
+INTEGER
+Rows already in DB
+error_rows
+INTEGER
+Rows with validation errors
+committed_rows
+INTEGER
+Rows actually inserted (set on commit)
+validation_errors
+JSONB
+Array of {row, field, error} objects
+submitted_by
+UUID FK users.id
+Uploader user
+approved_by
+UUID FK users.id, NULLABLE
+Approver user
+submitted_at
+TIMESTAMPTZ
+Upload timestamp
+approved_at
+TIMESTAMPTZ, NULLABLE
+Approval timestamp
+committed_at
+TIMESTAMPTZ, NULLABLE
+Commit timestamp
+infrastructure_upload_staging
+Column
+Type
+Description
+id
+UUID PK
+Staging row ID
+session_id
+UUID FK
+Parent upload session
+tenant_id
+UUID
+Tenant scoping
+asset_type
+VARCHAR(30)
+Asset type for this row
+row_number
+INTEGER
+Original Excel row number (for error reporting)
+row_data
+JSONB
+Parsed row values as key-value map
+is_valid
+BOOLEAN
+Whether this row passed all validation
+is_duplicate
+BOOLEAN
+Whether a live record with same key already exists
+errors
+JSONB
+Field-level errors for this row
+committed
+BOOLEAN
+Whether this row has been moved to live table
+infrastructure_deletion_sessions
+Column
+Type
+Description
+id
+UUID PK
+Session ID
+tenant_id
+UUID
+Tenant scoping
+asset_type
+VARCHAR(30)
+Asset type being deleted
+status
+VARCHAR(20)
+pending | validated | approved | executed | failed
+original_filename
+VARCHAR(500)
+Uploaded deletion file name
+total_rows
+INTEGER
+Rows in deletion file
+matched_rows
+INTEGER
+Rows that matched live records
+unmatched_rows
+INTEGER
+Rows that found no live record
+deleted_rows
+INTEGER
+Actually deleted (set on execution)
+match_details
+JSONB
+Array of {key, status:'matched'|'unmatched'} objects
+submitted_by
+UUID FK users.id
+Who initiated deletion
+approved_by
+UUID FK users.id, NULLABLE
+Who approved deletion
+submitted_at
+TIMESTAMPTZ
+When deletion was initiated
+approved_at
+TIMESTAMPTZ, NULLABLE
+When deletion was approved
+executed_at
+TIMESTAMPTZ, NULLABLE
+When deletion was executed
+3.4 Audit Log Table
+infrastructure_audit_log
+Follows the same pattern as customer_audit_log in the existing system:
+Column
+Type
+Description
+id
+UUID PK
+Log entry ID
+tenant_id
+UUID
+Tenant scoping
+asset_type
+VARCHAR(30)
+splitter | cabinet | olt | cable_route
+asset_id
+UUID
+ID of the affected asset
+asset_key
+VARCHAR(200)
+Human-readable key (box_id, cabinet_id, OLT name)
+action
+VARCHAR(30)
+'upload' | 'delete' | 'soft_delete' | 'restore'
+session_id
+UUID NULLABLE
+Upload or deletion session ID
+actor_id
+UUID FK users.id
+Performing user
+actor_label
+VARCHAR(200)
+Resolved display name (staff_profile.full_name fallback chain)
+timestamp
+TIMESTAMPTZ
+Action timestamp
+old_data
+JSONB NULLABLE
+Row state before action
+new_data
+JSONB NULLABLE
+Row state after action (NULL for deletes)
+4. Validation Engine Design
+4.1 Validation Layers
+Validation runs in four sequential layers. A row failing any layer is marked invalid and included in the error report. Validation never stops early — all errors across all rows are collected in a single pass.
+Layer
+Name
+What Is Checked
+1
+File-Level Validation
+File extension is .xlsx; file is not corrupted (openpyxl can open it); file is not empty (has at least one data row beyond the header); file size does not exceed the configured limit (default 10MB).
+2
+Header Validation
+All required column names are present (case-insensitive match); no required column is missing; extra columns are ignored with a warning.
+3
+Row-Level Data Validation
+Required fields are not blank; numeric fields (input, output, capacity, number_tray, number_of_ODF, number_customer) are valid integers within allowed ranges; splitter_level is exactly 'First-Level' or 'Second-Level'; splitter_type is exactly 'PCC' or 'Legacy'; longitude is a valid float in range [-180, 180]; latitude is a valid float in range [-90, 90]; string fields do not exceed max length limits.
+4
+Database Validation
+For each valid row, check whether a live (is_deleted=FALSE) record with the same unique key and tenant_id already exists. Flag as duplicate (not error) — duplicates are reported separately and excluded from the commit unless the user specifically enables overwrite mode.
+4.2 Coordinate Validation Rules
+Field
+Type
+Valid Range
+Error Message
+longitude
+float64
+-180.0 to +180.0
+Longitude must be a number between -180 and 180
+latitude
+float64
+-90.0 to +90.0
+Latitude must be a number between -90 and 90
+(both)
+not null
+Must be present
+Longitude and latitude are required
+(both)
+not (0, 0)
+Warn if exactly 0,0
+Coordinates (0, 0) may indicate missing data — flagged as warning, not error
+4.3 Enum Validation Rules
+Field
+Accepted Values
+Case Sensitive?
+Error on Invalid
+splitter_level
+First-Level, Second-Level
+Yes
+splitter_level must be exactly 'First-Level' or 'Second-Level'
+splitter_type
+PCC, Legacy
+Yes
+splitter_type must be exactly 'PCC' or 'Legacy'
+asset_type (API)
+splitter, cabinet, olt, cable_route
+Yes
+Invalid asset_type — internal check
+⚠  Enum validation is case-sensitive. 'first-level', 'FIRST-LEVEL', 'First Level' (with space) are all invalid. The error report will specify the exact accepted values.
+4.4 Validation Result Structure
+Each validation run produces a structured result stored in the upload session and returned to the frontend:
+{
+  "session_id": "uuid",
+  "asset_type": "splitter",
+  "total_rows": 150,
+  "valid_rows": 142,
+  "duplicate_rows": 5,
+  "error_rows": 8,
+  "warnings": 2,
+  "errors": [
+    { "row": 3, "field": "splitter_level", "value": "first-level",
+      "error": "splitter_level must be exactly 'First-Level' or 'Second-Level'" },
+    { "row": 7, "field": "longitude", "value": "abc",
+      "error": "Longitude must be a valid number" }
+  ],
+  "duplicates": [
+    { "row": 12, "box_id": "SPL-001", "splitter_level": "First-Level" }
+  ]
+}
+5. API Endpoint Design
+5.1 Upload APIs
+Method
+Path
+Description
+Auth
+POST
+/api/v1/infrastructure/upload/{asset_type}
+Accept multipart .xlsx file. Create upload session (PENDING). Run validation synchronously for files <500 rows; async job for larger files. Return session_id and initial validation status.
+Staff + Upload permission
+GET
+/api/v1/infrastructure/upload/{session_id}/status
+Poll validation status. Returns session state, progress, and validation summary when complete.
+Staff
+GET
+/api/v1/infrastructure/upload/{session_id}/preview
+Return full preview: valid rows, duplicate rows, error rows, warnings. Paginated. Used to populate the preview screen.
+Staff
+GET
+/api/v1/infrastructure/upload/{session_id}/errors/export
+Stream downloadable .xlsx error report with original data + Errors column for all invalid rows.
+Staff
+POST
+/api/v1/infrastructure/upload/{session_id}/approve
+Approve and commit the upload. Moves valid (non-duplicate) staging rows to live tables atomically. Returns committed count.
+Staff + Upload permission
+POST
+/api/v1/infrastructure/upload/{session_id}/reject
+Reject the preview. Deletes staging rows. Sets session to ROLLED_BACK.
+Staff
+GET
+/api/v1/infrastructure/upload/history
+List all upload sessions for this tenant. Filterable by asset_type, status, date range. Paginated.
+Staff
+GET
+/api/v1/infrastructure/upload/{session_id}
+Get full session detail including all metadata, who uploaded, who approved, when.
+Staff
+5.2 Asset Query APIs
+Method
+Path
+Description
+GET
+/api/v1/infrastructure/splitters
+List splitter boxes for tenant. Filter: splitter_level, splitter_type, cabinet_id. Paginated.
+GET
+/api/v1/infrastructure/splitters/{id}
+Get single splitter with full detail including parent splitter and cabinet linkage.
+GET
+/api/v1/infrastructure/cabinets
+List cabinets. Filter: capacity range. Paginated.
+GET
+/api/v1/infrastructure/cabinets/{id}
+Get single cabinet with linked splitter count.
+GET
+/api/v1/infrastructure/olts
+List OLTs. Paginated.
+GET
+/api/v1/infrastructure/olts/{id}
+Get single OLT.
+GET
+/api/v1/infrastructure/assets/map
+GeoJSON endpoint returning all active assets for map rendering. Filterable by asset_type and bounding box.
+5.3 Deletion APIs
+Method
+Path
+Description
+Auth
+DELETE
+/api/v1/infrastructure/{asset_type}/{id}
+Single asset soft-delete. Requires confirmation header X-Confirm-Delete: true. Writes audit log entry.
+Admin or Infra Manager
+POST
+/api/v1/infrastructure/deletion/upload/{asset_type}
+Upload batch deletion .xlsx file. Validate existence of each key. Create deletion session.
+Admin
+GET
+/api/v1/infrastructure/deletion/{session_id}/preview
+Return match report: which rows matched live records, which are unmatched.
+Admin
+POST
+/api/v1/infrastructure/deletion/{session_id}/approve
+Execute deletion for all matched rows. Soft-delete. Write audit log entries. Return deletion summary.
+Admin
+POST
+/api/v1/infrastructure/deletion/{session_id}/reject
+Cancel the deletion session.
+Admin
+GET
+/api/v1/infrastructure/deletion/history
+List deletion sessions for tenant.
+Admin
+All infrastructure endpoints live on infrastructure_router with prefix /api/v1/infrastructure. This router must be registered in main.py BEFORE the tasks_router to prevent catch-all route shadowing.
+6. Implementation Phases
+Eight phases are defined below. Each phase has a validation gate checkpoint. No phase begins until the prior phase checkpoint is passed and approved.
+PHASE 1  Database Migrations & Schema Setup   [Sprint 1 — ~3 days]
+6.1 Phase 1 Objective
+Create and migrate all database tables. Enable PostGIS extension if not already active. Establish index strategy. No API or UI work in this phase.
+6.1.1 Backend Steps
+Verify PostGIS extension is enabled on the PostgreSQL instance: CREATE EXTENSION IF NOT EXISTS postgis; Confirm in Alembic environment that geoalchemy2 is available.
+Write Alembic migrations in dependency order: infrastructure_upload_sessions → infrastructure_upload_staging → infrastructure_deletion_sessions → splitter_boxes → cabinets → olts → infrastructure_audit_log.
+Add columns to existing cable_routes table if needed (upload_session_id, is_deleted) for consistency. Do not break existing cable route data.
+Add indexes: GiST index on all location (geometry) columns; GIN index on validation_errors JSONB columns; composite index (box_id, tenant_id) on splitter_boxes; composite index (cabinet_id, tenant_id) on cabinets; composite index (name, tenant_id) on olts.
+Add DB-level CHECK constraints: splitter_level IN ('First-Level', 'Second-Level'); splitter_type IN ('PCC', 'Legacy'); longitude BETWEEN -180 AND 180; latitude BETWEEN -90 AND 90.
+Seed test data for one test tenant: 3 splitters (2 First-Level, 1 Second-Level), 2 cabinets, 1 OLT. Used for duplicate detection tests in Phase 2.
+6.1.2 Validation Gates
+All migrations run on a clean database without error.
+Rollback script returns schema to exact prior state.
+PostGIS geometry columns created: SELECT type FROM geometry_columns confirms Point SRID 4326 for all location columns.
+UNIQUE constraints enforced: attempt to insert duplicate box_id + tenant_id returns IntegrityError.
+Seed data queryable; cross-tenant isolation confirmed.
+Existing cable_routes table data is unchanged after migration.
+🔴  Do not proceed to Phase 2 until a tech lead reviews and approves the migration scripts and confirms PostGIS is available in all environments.
+PHASE 2  Validation Engine & Upload Service Backend   [Sprint 1–2 — ~4 days]
+6.2 Phase 2 Objective
+Build the core validation engine (upload_service.py), GIS utility functions (gis_utils.py), and the staging table logic. This is the most critical backend component — all upload safety depends on it.
+6.2.1 gis_utils.py
+Implement validate_coordinates(longitude, latitude) → returns (is_valid: bool, errors: list[str]). Checks: both values are present; both are numeric; longitude in [-180, 180]; latitude in [-90, 90]. Does NOT raise exceptions — returns error list for accumulation.
+Implement make_point(longitude, latitude) → WKTElement('POINT(lng lat)', srid=4326) using geoalchemy2. This is the function used when building ORM model instances.
+Implement warn_zero_island(longitude, latitude) → bool: returns True if coordinates are exactly (0, 0) — logged as a warning, not an error.
+6.2.2 upload_service.py — Validation Engine
+Implement validate_file(file: UploadFile) → FileValidationResult. Checks: file extension is .xlsx; file bytes are not empty; openpyxl can open the file without error; file size ≤ MAX_UPLOAD_SIZE_MB (configurable, default 10).
+Implement validate_headers(sheet, required_columns: list[str]) → HeaderValidationResult. Case-insensitive match. Returns list of missing columns. If any required column missing, the entire file is rejected before row validation begins.
+Implement validate_row_splitter(row_dict) → RowValidationResult. Checks all splitter fields per the rules in Section 4. Collects all errors in the row before returning.
+Implement validate_row_cabinet(row_dict) → RowValidationResult. Cabinet-specific rules.
+Implement validate_row_olt(row_dict) → RowValidationResult. OLT-specific rules.
+Implement check_duplicate_splitter(db, box_id, splitter_level, tenant_id) → bool. Async query: SELECT 1 FROM splitter_boxes WHERE box_id=? AND splitter_level=? AND tenant_id=? AND is_deleted=FALSE. Returns True if duplicate.
+Implement check_duplicate_cabinet(db, cabinet_id, tenant_id) → bool. Same pattern.
+Implement check_duplicate_olt(db, name, tenant_id) → bool. Same pattern.
+Implement run_full_validation(db, session_id, asset_type, file_bytes, tenant_id) → ValidationSummary. Orchestrates: file → headers → rows → duplicate checks. Writes all staging rows to infrastructure_upload_staging. Updates infrastructure_upload_sessions with counts and errors. Returns summary.
+6.2.3 upload_service.py — Commit Logic
+Implement commit_session(db, session_id, tenant_id, approved_by_user_id) → CommitResult. Must run in a single DB transaction. For each staging row where is_valid=True and is_duplicate=False: build ORM model instance, set location = make_point(longitude, latitude), set upload_session_id = session_id; INSERT into live table; write infrastructure_audit_log entry with action='upload'; mark staging row committed=True. On any exception, rollback entire transaction, set session status='rolled_back'. Return count of committed rows.
+Actor label for audit log: resolve using the established pattern: (user.staff_profile.full_name if user.staff_profile else user.username) if user else 'System'. Use selectinload(User.staff_profile) in the user fetch query.
+6.2.4 deletion_service.py
+Implement validate_deletion_file(asset_type, file_bytes) → DeletionValidationResult. Parse .xlsx, check headers, build list of deletion keys from the file.
+Implement match_deletion_keys_splitter(db, keys: list[{box_id, splitter_level}], tenant_id) → list[MatchResult]. For each key, query live table. Returns matched vs unmatched.
+Implement match_deletion_keys_cabinet(db, keys: list[{cabinet_id, capacity}], tenant_id) → list[MatchResult]. Cabinet matching on both columns as per spec.
+Implement execute_deletion(db, session_id, tenant_id, approved_by_user_id) → DeletionResult. In a single transaction: for each matched record, set is_deleted=True, write audit log entry with action='soft_delete'. Rollback on any exception.
+6.2.5 Error Report Generation
+Implement generate_error_report_xlsx(session_id, db) → BytesIO. Reads staging rows for the session where is_valid=False. Writes an .xlsx file: original columns + an 'Errors' column listing all field errors for that row. Returns bytes for streaming download.
+6.2.6 Validation Gates (Phase 2 Checkpoint)
+Unit test: validate_coordinates(200, 45) returns error; validate_coordinates(45.3, 6.2) returns valid.
+Unit test: validate_row_splitter with splitter_level='first-level' returns error with exact message.
+Unit test: run_full_validation on a 10-row test file with 2 intentional errors produces session with error_rows=2, valid_rows=8.
+Unit test: commit_session inserts exactly valid_rows rows into the live table; staging rows marked committed=True.
+Unit test: commit_session with a simulated DB error on row 3 rolls back all rows — zero rows in live table.
+Unit test: generate_error_report_xlsx produces a valid .xlsx file with an Errors column.
+PHASE 3  Upload API Router   [Sprint 2 — ~3 days]
+6.3 Phase 3 Objective
+Implement all upload and asset query API endpoints in router.py. Register the router in main.py before tasks_router.
+6.3.1 Router Implementation Steps
+Create backend/app/modules/infrastructure/router.py. Define infrastructure_router = APIRouter(prefix='/api/v1/infrastructure', tags=['infrastructure']).
+Implement POST /upload/{asset_type}. Accept multipart/form-data with file field. Validate asset_type against allowed enum. Call validate_file(). On file error, return 422 immediately — do not create session. Create upload session record (status=PENDING). Call run_full_validation() synchronously (add async task queue support in Phase 7 if needed for large files). Update session to VALIDATED. Return session_id and validation summary.
+Implement GET /upload/{session_id}/status. Return session state, counts, and summary. Used by frontend to poll for async validation completion.
+Implement GET /upload/{session_id}/preview. Return paginated list of staging rows with is_valid, is_duplicate, errors per row. Include session-level summary at top.
+Implement GET /upload/{session_id}/errors/export. Call generate_error_report_xlsx(). Stream response with Content-Disposition: attachment; filename='upload_errors_{session_id}.xlsx'.
+Implement POST /upload/{session_id}/approve. Verify session is in VALIDATED state (reject with 409 if not). Verify caller is same tenant as session. Call commit_session(). Update session to COMMITTED. Return CommitResult.
+Implement POST /upload/{session_id}/reject. Set session to ROLLED_BACK. Delete staging rows for session. Return 200.
+Implement GET /upload/history. Query infrastructure_upload_sessions for tenant. Paginate. Support filters: asset_type, status, date range.
+Implement GET asset list endpoints for splitters, cabinets, OLTs with pagination and filters.
+Implement GET /assets/map. Return GeoJSON FeatureCollection. Each feature: geometry from location column, properties include asset_type, id, key identifier, splitter_level where applicable.
+Register infrastructure_router in main.py. Place registration BEFORE tasks_router include. Add a comment: # IMPORTANT: infrastructure_router must remain above tasks_router to prevent /{task_id}/... route shadowing.
+6.3.2 Validation Gates (Phase 3 Checkpoint)
+POST /upload/splitter with a valid 5-row .xlsx returns session_id and validation summary.
+POST /upload/splitter with invalid file extension returns 422 with clear error message.
+GET /upload/{session_id}/preview returns paginated rows with errors correctly attributed.
+POST /upload/{session_id}/approve commits valid rows; subsequent GET /splitters shows new records.
+POST /upload/{session_id}/approve on an already-COMMITTED session returns 409.
+Tenant isolation: session from Tenant A cannot be approved by Tenant B user.
+GET /assets/map returns valid GeoJSON — validate with a GeoJSON linter.
+PHASE 4  Deletion API Router   [Sprint 2 — ~2 days]
+6.4 Phase 4 Objective
+Implement all deletion endpoints: single-item delete and batch deletion workflow via upload.
+6.4.1 Deletion Router Steps
+Implement DELETE /{asset_type}/{id}. Check X-Confirm-Delete: true header — return 400 if missing. Fetch asset, verify tenant_id matches, verify is_deleted=False. Set is_deleted=True. Write audit log entry. Return deletion summary {deleted_id, asset_type, key, deleted_at}.
+Implement POST /deletion/upload/{asset_type}. Accept .xlsx file. Validate file and headers. Call match_deletion_keys() for the asset type. Create deletion session with status=VALIDATED and full match_details. Return session_id and match summary.
+Implement GET /deletion/{session_id}/preview. Return match details: matched records (id, key, current data snapshot), unmatched rows (key, reason: not found).
+Implement POST /deletion/{session_id}/approve. Verify session VALIDATED, caller is admin, tenant matches. Call execute_deletion(). Update session to EXECUTED. Return deletion summary.
+Implement POST /deletion/{session_id}/reject. Set session to FAILED (rejected). Return 200.
+Implement GET /deletion/history. Paginated list of deletion sessions for tenant.
+6.4.2 Validation Gates (Phase 4 Checkpoint)
+DELETE /splitter/{id} without confirmation header returns 400.
+DELETE /splitter/{id} for an already-deleted asset returns 404.
+Batch deletion upload: 5 rows, 3 matched, 2 unmatched — preview shows correct counts.
+Batch approve: only the 3 matched rows are soft-deleted. Unmatched rows produce no DB change.
+Audit log: all deleted items appear in infrastructure_audit_log with actor_label resolved correctly.
+Non-admin user attempting POST /deletion/{id}/approve returns 403.
+PHASE 5  Frontend — Upload Pages & Preview Workflow   [Sprint 3 — ~5 days]
+6.5 Phase 5 Objective
+Build the complete upload workflow UI: asset type selection, file upload, progress indicator, preview table, approval/rejection, and upload history. All pages wrapped in ErrorBoundary.
+6.5.1 Upload Flow — Step-by-Step UI
+Route: /infrastructure/upload. Landing page shows four upload cards: Splitter Boxes, Cabinets, OLTs, Cable Routes. Each card shows last upload date and status. Clicking a card navigates to the upload form for that asset type.
+Route: /infrastructure/upload/{asset_type}. Upload form with: file drag-and-drop zone (.xlsx only, max size shown); Download Template button (downloads a pre-formatted Excel template for the asset type); Upload button. On upload, POST /upload/{asset_type} and navigate to the session preview page with the returned session_id.
+Route: /infrastructure/upload/{session_id}/preview. Shows: session summary bar (total, valid, duplicate, error counts); three tabs — Valid Rows table, Duplicate Rows table, Error Rows table with per-field error messages; Download Error Report button (only shown if error_rows > 0); Approve Upload button (disabled if error_rows > 0 and there are zero valid rows); Reject button. Approve triggers a confirmation dialog: 'This will add N records to the live database. This cannot be undone without manual deletion. Confirm?' On confirmation, POST /approve. On success, navigate to session detail with success summary.
+Route: /infrastructure/upload/history. Paginated table of all upload sessions: filename, asset type, uploaded by, timestamp, total rows, valid, duplicates, errors, status badge, View link. Filters: asset type, status, date range.
+Route: /infrastructure/upload/{session_id}. Session detail view showing all metadata, who uploaded and approved, row counts, and a downloadable error report link if applicable.
+6.5.2 Frontend Implementation Rules
+All upload pages wrap their content in the existing ErrorBoundary component.
+File input accepts only .xlsx MIME type and extension — enforce both on the client and server.
+Approval button shows a spinner during the API call and is disabled after first click to prevent double-submission.
+The preview table for valid rows is paginated (50 rows per page) to handle large uploads without browser freeze.
+Error rows table shows: Row Number | Field | Value | Error Message. Sortable by row number.
+Status badges use consistent color scheme: valid=green, duplicate=orange, error=red, committed=blue.
+6.5.3 Validation Gates (Phase 5 Checkpoint)
+Upload a 100-row valid .xlsx — preview loads with all 100 rows in Valid tab; Approve works; history shows session as COMMITTED.
+Upload a .csv file — rejected on the client before any API call.
+Upload a .xlsx with 10 error rows — Error tab shows all 10 with correct field names and messages; Approve button is enabled (because there are also valid rows); error report download produces correct .xlsx.
+Double-clicking Approve does not create duplicate sessions.
+Page crash in the preview table is caught by ErrorBoundary — shows fallback UI, not blank page.
+PHASE 6  Frontend — Deletion Pages & Infrastructure Management   [Sprint 3–4 — ~4 days]
+6.6 Phase 6 Objective
+Build the deletion workflow UI, single-item deletion from asset detail pages, and the infrastructure management overview with map.
+6.6.1 Deletion Flow UI
+Route: /infrastructure/deletion. Landing page showing: Single Deletion section (search-by-key form for any asset type) and Batch Deletion section (upload card per asset type).
+Single deletion: search for an asset by its key (box_id, cabinet_id, or OLT name). Show asset detail card with current data. Delete button opens confirmation modal: 'Are you sure you want to delete [key]? This cannot be undone.' On confirm, DELETE /{asset_type}/{id} with X-Confirm-Delete header. Show success/error toast.
+Route: /infrastructure/deletion/upload/{asset_type}. File upload form for batch deletion. Shows required column format. On upload, POST /deletion/upload/{asset_type}. Navigate to deletion preview.
+Route: /infrastructure/deletion/{session_id}/preview. Shows: matched records table (records that will be deleted — show key, current data snapshot); unmatched rows table (rows from file that found no live record — show key, reason); counts summary. Approve button: 'Delete N matched records?' with confirmation dialog. Reject button cancels.
+Route: /infrastructure/deletion/history. Paginated list of deletion sessions.
+6.6.2 Infrastructure Overview Page
+Route: /infrastructure. Shows: summary cards (total active splitters by level, total cabinets, total OLTs, total cable routes); interactive map using Leaflet or Mapbox GL showing all assets as color-coded markers (OLT=red, Cabinet=blue, First-Level Splitter=orange, Second-Level Splitter=yellow, Cable Routes=green lines); filter panel to toggle asset types on/off.
+Clicking a marker on the map opens a popup with: asset type, key identifier, key stats, Edit link, Delete button.
+Table view toggle below the map: tabbed tables for each asset type with pagination.
+6.6.3 Validation Gates (Phase 6 Checkpoint)
+Single deletion: search for a splitter by box_id, confirm deletion — asset no longer appears in list; appears as is_deleted=TRUE in DB.
+Batch deletion: upload 5-row deletion file with 3 matched, 2 unmatched — preview shows correct split; approve deletes exactly 3.
+Deletion without confirmation modal confirmation does not trigger API call.
+Infrastructure overview map renders all seeded test assets as markers.
+Admin-only routes (deletion approval) return 403 for non-admin users.
+PHASE 7  Audit, Logging & Upload History   [Sprint 4 — ~2 days]
+6.7 Phase 7 Objective
+Complete the audit trail, add upload history page enhancements, and ensure all logging uses the correct actor label resolution pattern.
+6.7.1 Audit Service Implementation
+Create audit_service.py with write_audit_entry(db, asset_type, asset_id, asset_key, action, session_id, actor_user, old_data, new_data). Resolve actor_label using: (user.staff_profile.full_name if user.staff_profile else user.username) if user else 'System'. Use selectinload(User.staff_profile) in any query that fetches the actor user within this function.
+Add audit log API endpoint: GET /api/v1/infrastructure/audit?asset_type=&asset_id=&from=&to=. Returns paginated audit entries for admin users.
+Add audit log tab to asset detail pages (splitter, cabinet, OLT detail views): shows chronological list of actions, actor name, timestamp, data diff.
+6.7.2 Upload History Enhancements
+Add ability to view the original staging rows for any past session (even COMMITTED ones): GET /upload/{session_id}/staging. Useful for post-upload audit — 'what exactly was uploaded in this batch?'
+Add re-upload shortcut: on a FAILED or ROLLED_BACK session, show a 'Re-upload with same file' button that uses the stored file hash to detect if the file is identical to a previous successful upload.
+6.7.3 Validation Gates (Phase 7 Checkpoint)
+Audit log entry written for every upload commit, every single delete, and every batch deletion execution.
+actor_label in audit entries resolves correctly for a user with a StaffProfile; correctly falls back to username for a user without one; correctly shows 'System' for automated actions.
+GET /infrastructure/audit returns entries filtered by asset_type and date range correctly.
+PHASE 8  Security Hardening, Testing & Deployment   [Sprint 4–5 — ~4 days]
+6.8 Phase 8 Objective
+Complete security audit, full test suite, and production deployment.
+6.8.1 Security Hardening
+RBAC audit: document required role for each endpoint. Upload requires 'Staff + Upload permission'. Single delete requires 'Admin or Infrastructure Manager'. Batch deletion approval requires 'Admin'. Audit log viewing requires 'Admin'. Confirm all role checks use platform middleware, not inline checks.
+File upload security: validate MIME type server-side (not just extension); scan for malformed .xlsx that triggers openpyxl vulnerabilities (limit max sheet size; set openpyxl read_only=True for parsing); enforce file size hard cap.
+Tenant isolation audit: automated tests authenticate as Tenant A and attempt to GET, approve, or delete sessions and assets belonging to Tenant B. All must return 403 or 404.
+Injection protection: all column values from Excel are parsed as their expected Python types and passed as SQLAlchemy bind parameters — never interpolated into raw SQL strings.
+6.8.2 Test Suite
+Unit tests: validation engine (all asset types, all error conditions); coordinate validation boundary values (exactly -180, +180, -90, +90, 0,0 warning); enum case sensitivity; commit_session rollback on failure; execute_deletion rollback on failure.
+Integration tests: full upload workflow for each asset type (splitter, cabinet, OLT); duplicate detection; batch deletion; single deletion; error report download.
+Regression tests: confirm Cable Routes existing upload logic is unbroken after infrastructure_router registration.
+Security tests: cross-tenant session access; batch deletion without approval; file upload with non-.xlsx extension and with malformed .xlsx.
+Load test: upload a 1,000-row .xlsx for splitters. Measure validation time. Confirm commit completes atomically.
+6.8.3 Deployment Steps
+Run all Phase 1–7 Alembic migrations on production (take DB snapshot first).
+docker compose build backend
+docker compose up -d backend
+Monitor docker compose logs -f backend for 10 minutes — zero AttributeError, zero unhandled exceptions.
+Smoke test: upload a 5-row splitter test file → validate → approve → confirm 5 splitters appear in GET /splitters.
+Smoke test: upload a 3-key deletion file → preview → approve → confirm 3 splitters are is_deleted=TRUE.
+Confirm existing task board, project pipeline, and customer module are unbroken.
+7. Sprint Plan & Timeline
+Sprint
+Phases
+Key Deliverables
+Estimate
+Sprint 1
+Phase 1 + Phase 2
+DB migrations, PostGIS geometry columns, full validation engine + staging logic
+~7 days
+Sprint 2
+Phase 3 + Phase 4
+Upload APIs, deletion APIs, router registered correctly in main.py
+~5 days
+Sprint 3
+Phase 5 + Phase 6 (start)
+Upload preview UI, history, deletion UI, infrastructure overview map
+~7 days
+Sprint 4
+Phase 6 (end) + Phase 7
+Deletion pages complete, audit trail, upload history enhancements
+~4 days
+Sprint 5
+Phase 8
+Security hardening, full test suite, deployment
+~4 days
+Total estimate: ~27 working days for one full-stack engineer. Two engineers working in parallel (one backend-heavy, one frontend-heavy) reduces to ~16 days.
+8. Excel Template Specifications
+For each asset type, a downloadable template .xlsx file must be provided from the upload UI. The templates enforce correct column names, include header row styling, and contain one example data row to guide operators.
+8.1 Splitter Upload Template
+Column Name
+Example Value
+Required
+Validation Rule
+box_id
+SPL-001-FL
+Yes
+Any string, max 100 chars. Must be unique in system.
+input
+1
+Yes
+Integer, ≥ 1
+output
+8
+Yes
+Integer, ≥ 1
+splitter_level
+First-Level
+Yes
+Exactly 'First-Level' or 'Second-Level' — case sensitive
+splitter_type
+PCC
+Yes
+Exactly 'PCC' or 'Legacy' — case sensitive
+number_customer
+12
+No
+Integer ≥ 0 or blank
+longitude
+3.3792
+Yes
+Float, -180 to +180
+latitude
+6.5244
+Yes
+Float, -90 to +90
+8.2 Cabinet Upload Template
+Column Name
+Example Value
+Required
+Validation Rule
+cabinet_id
+CAB-001
+Yes
+Any string, max 100 chars. Must be unique.
+capacity
+48
+Yes
+Integer, > 0
+number_tray
+4
+Yes
+Integer, ≥ 0
+longitude
+3.3792
+Yes
+Float, -180 to +180
+latitude
+6.5244
+Yes
+Float, -90 to +90
+8.3 OLT Upload Template
+Column Name
+Example Value
+Required
+Validation Rule
+name
+OLT-SURULERE-01
+Yes
+Any string, max 200 chars. Must be unique.
+location
+22 Bode Thomas Street, Surulere
+Yes
+Any string, max 500 chars
+number_of_ODF
+16
+No
+Integer ≥ 0 or blank
+longitude
+3.3792
+Yes
+Float, -180 to +180
+latitude
+6.5244
+Yes
+Float, -90 to +90
+8.4 Splitter Deletion Template
+Column Name
+Example Value
+Required
+Notes
+box_id
+SPL-001-FL
+Yes
+Must match a live record's box_id exactly
+splitter_level
+First-Level
+Yes
+Must match the live record's splitter_level exactly — both fields required for composite match
+8.5 Cabinet Deletion Template
+Column Name
+Example Value
+Required
+Notes
+cabinet_id
+CAB-001
+Yes
+Must match a live record's cabinet_id exactly
+capacity
+48
+Yes
+Must match the live record's capacity — used to prevent accidental deletion of wrong cabinet
+9. Risks & Mitigations
+Risk
+Severity
+Mitigation
+PostGIS not enabled in production PostgreSQL
+Critical
+Verify in Phase 1 before any other work. Add a startup check in the application that raises a clear error if postgis extension is not found.
+Large Excel files (5,000+ rows) causing timeout on synchronous validation
+High
+Phase 3: implement async task queue (Celery or FastAPI BackgroundTasks) for files > 500 rows. Frontend polls /status endpoint. Phase 1 works synchronously as MVP.
+infrastructure_router catch-all routes shadowing existing task routes
+High
+Register infrastructure_router first in main.py. Add regression test that hits GET /api/v1/tasks/{id} and confirms it still routes to the task endpoint after infrastructure_router is added.
+actor_label resolving as None in audit log (regression of full_name bug)
+High
+Enforce via code review checklist. Write unit test for audit_service.write_audit_entry with a user that has no staff_profile — confirm fallback to username.
+Batch deletion file with thousands of keys causing slow matching queries
+Medium
+Use IN queries with chunking (1,000 keys per IN clause). Add index on box_id, tenant_id.
+Excel file with merged cells or non-standard formatting breaking openpyxl
+Medium
+Use openpyxl in data_only mode, skip merged cells. Validate that row[0] is the expected header. Return clear error: 'File format not recognized — please use the provided template.'
+Coordinate (0,0) incorrectly accepted for Nigerian infrastructure
+Medium
+The warning flag for (0,0) coordinates is logged in the session. Operations team is notified in the preview. Not a hard error — some edge-case valid coordinates near null island exist but are rare for Nigerian ISP infrastructure.
+Approval of upload by different user than uploader causing audit confusion
+Low
+Log both submitted_by and approved_by separately in infrastructure_upload_sessions. Audit report shows both users.
+ErrorBoundary not applied to new upload pages causing blank-page regression
+Medium
+PR review checklist item. Add automated Playwright/Cypress test that simulates a React render error in the preview table and confirms ErrorBoundary fallback appears.
+10. Deployment Checklist
+10.1 Pre-Deployment
+Confirm PostGIS extension enabled in production DB: SELECT PostGIS_Version();
+Take full database snapshot before running any migrations.
+Run all Alembic migrations on staging first, confirm no errors, confirm rollback works.
+Confirm infrastructure_router registered BEFORE tasks_router in main.py.
+Confirm all unit and integration tests pass in CI.
+10.2 Deployment
+docker compose build backend
+Run Alembic migrations: alembic upgrade head
+docker compose up -d backend
+Monitor: docker compose logs -f backend for 10 minutes — zero AttributeError, zero unhandled exceptions.
+10.3 Smoke Tests
+Upload 5-row splitter .xlsx → validate → approve → GET /splitters shows 5 new records.
+Upload splitter .xlsx with 2 error rows → error report download works, shows correct rows.
+Upload splitter deletion file (3 matched) → approve → 3 records soft-deleted in DB.
+Single splitter deletion → is_deleted=TRUE in DB; does not appear in GET /splitters.
+GET /assets/map returns GeoJSON with newly uploaded splitters as Point features.
+Audit log: GET /infrastructure/audit shows upload and deletion events with correct actor_label.
+Existing task board, project pipeline, customer module — all functional after infrastructure_router addition.
+10.4 Security Smoke Tests
+Attempt GET /infrastructure/upload/{session_id} from Tenant B user — returns 404.
+Attempt POST /infrastructure/deletion/{session_id}/approve from non-admin user — returns 403.
+Upload a .csv file — rejected with 422 before session is created.
+END OF IMPLEMENTATION PLAN
+Opsyn Platform  |  Infrastructure Management Enhancement  |  v1.0  |  May 2026

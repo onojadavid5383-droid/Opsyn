@@ -1,0 +1,15 @@
+/* OPSYN — project pipeline stage dialogs (Advance / Push back) */
+
+.stack { display: flex; flex-direction: column; gap: var(--space-3); }
+.route { display: grid; grid-template-columns: 1fr auto 1fr; align-items: stretch; gap: var(--space-2); }
+@media (max-width: 480px) { .route { grid-template-columns: 1fr; } .arrow { transform: rotate(90deg); justify-self: center; } }
+.stage { padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-sunken); }
+.stage[data-role='to'] { border-color: var(--accent-text); background: var(--surface-selected); }
+.stage[data-role='back'] { border-color: var(--status-warning-fg); }
+.stageRole { font-size: var(--text-2xs); color: var(--text-secondary); }
+.stageName { font-size: var(--text-sm); font-weight: var(--weight-semibold); }
+.stageMeta { font-size: var(--text-xs); color: var(--text-secondary); }
+.arrow { align-self: center; color: var(--text-secondary); }
+.notice { padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--status-warning-bg); color: var(--status-warning-fg); font-size: var(--text-xs); line-height: 1.5; }
+.check { display: flex; align-items: flex-start; gap: var(--space-2); font-size: var(--text-sm); cursor: pointer; }
+.check input { width: 16px; height: 16px; margin-top: 2px; accent-color: var(--accent-text); }

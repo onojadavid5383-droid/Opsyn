@@ -1,0 +1,3 @@
+interface:
+  display_name: "Opsyn Script Agent"
+  short_description: "Generate, debug, and compress Opsyn implementation scripts."

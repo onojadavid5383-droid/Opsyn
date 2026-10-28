@@ -1,0 +1,231 @@
+- generic [ref=f1e3]:
+  - link "Skip to content" [ref=f1e473] [cursor=pointer]:
+    - /url: "#main"
+  - complementary "Primary" [ref=f1e474]:
+    - link "OpSyn — Command Center" [ref=f1e475] [cursor=pointer]:
+      - /url: /dashboard
+      - img "Opsyn logo mark" [ref=f1e476]
+    - navigation "Main" [ref=f1e477]:
+      - generic [ref=f1e18]:
+        - generic [ref=f1e19]: Monitor
+        - list "Monitor" [ref=f1e478]:
+          - listitem [ref=f1e21]:
+            - link "Command Center" [ref=f1e479] [cursor=pointer]:
+              - /url: /dashboard
+          - listitem [ref=f1e29]:
+            - link "Alarms & outages" [ref=f1e480] [cursor=pointer]:
+              - /url: /outage
+          - listitem [ref=f1e37]:
+            - link "Network map" [ref=f1e481] [cursor=pointer]:
+              - /url: /network
+      - generic [ref=f1e42]:
+        - generic [ref=f1e43]: Operate
+        - list "Operate" [ref=f1e482]:
+          - listitem [ref=f1e45]:
+            - link "Tasks" [ref=f1e483] [cursor=pointer]:
+              - /url: /tasks
+          - listitem [ref=f1e51]:
+            - link "Projects" [ref=f1e484] [cursor=pointer]:
+              - /url: /projects
+          - listitem [ref=f1e56]:
+            - link "Shifts" [ref=f1e485] [cursor=pointer]:
+              - /url: /shifts
+          - listitem [ref=f1e63]:
+            - link "Customers" [ref=f1e486] [cursor=pointer]:
+              - /url: /customers
+      - generic [ref=f1e70]:
+        - generic [ref=f1e71]: Engineer
+        - list "Engineer" [ref=f1e487]:
+          - listitem [ref=f1e73]:
+            - link "Infrastructure" [ref=f1e488] [cursor=pointer]:
+              - /url: /infrastructure
+          - listitem [ref=f1e79]:
+            - link "FTTx Designer" [ref=f1e489] [cursor=pointer]:
+              - /url: /fttx-designer
+      - generic [ref=f1e87]:
+        - generic [ref=f1e88]: Analyze
+        - list "Analyze" [ref=f1e490]:
+          - listitem [ref=f1e90]:
+            - link "Reports" [ref=f1e491] [cursor=pointer]:
+              - /url: /reports
+          - listitem [ref=f1e95]:
+            - link "Activity" [ref=f1e492] [cursor=pointer]:
+              - /url: /activity
+          - listitem [ref=f1e100]:
+            - link "Audit log" [ref=f1e493] [cursor=pointer]:
+              - /url: /audit
+      - generic [ref=f1e106]:
+        - generic [ref=f1e107]: Admin
+        - list "Admin" [ref=f1e494]:
+          - listitem [ref=f1e109]:
+            - link "People" [ref=f1e495] [cursor=pointer]:
+              - /url: /staff
+          - listitem [ref=f1e124]:
+            - link "Workflows" [ref=f1e496] [cursor=pointer]:
+              - /url: /org/workflows
+          - listitem [ref=f1e131]:
+            - link "Forms" [ref=f1e497] [cursor=pointer]:
+              - /url: /form-builder
+          - listitem [ref=f1e137]:
+            - link "Settings" [ref=f1e498] [cursor=pointer]:
+              - /url: /settings
+    - button "Expand sidebar" [ref=f1e499] [cursor=pointer]
+  - banner [ref=f1e148]:
+    - navigation "Breadcrumb" [ref=f1e500]:
+      - list [ref=f1e150]:
+        - listitem [ref=f1e151]:
+          - generic [ref=f1e152]: Admin
+        - listitem [ref=f1e501]:
+          - text: /
+          - link "Forms" [ref=f1e502] [cursor=pointer]:
+            - /url: /form-builder
+        - listitem [ref=f1e153]:
+          - text: /
+          - generic [ref=f1e154]: Details
+    - button "Search pages and commands" [ref=f1e503] [cursor=pointer]
+    - 'button "Theme: Light" [ref=f1e504] [cursor=pointer]'
+    - button "Notifications" [ref=f1e505] [cursor=pointer]
+    - 'button "Account: david.onoja" [ref=f1e506] [cursor=pointer]':
+      - generic [aria-hidden] [ref=f1e171]: DA
+  - region "Network health" [ref=f1e507]:
+    - link "0 critical outages open" [ref=f1e508] [cursor=pointer]:
+      - /url: /outage?severity=critical
+      - generic [ref=f1e177]: "0"
+      - generic [ref=f1e178]: Critical
+    - link "0 high outages open" [ref=f1e509] [cursor=pointer]:
+      - /url: /outage?severity=high
+      - generic [ref=f1e183]: "0"
+      - generic [ref=f1e184]: High
+    - link "0 warning outages open" [ref=f1e510] [cursor=pointer]:
+      - /url: /outage?severity=warning
+      - generic [ref=f1e189]: "0"
+      - generic [ref=f1e190]: Warning
+    - link "0 low outages open" [ref=f1e511] [cursor=pointer]:
+      - /url: /outage?severity=low
+      - generic [ref=f1e195]: "0"
+      - generic [ref=f1e196]: Low
+    - link "0 SLA at risk" [ref=f1e512] [cursor=pointer]:
+      - /url: /outage?view=sla
+      - generic [ref=f1e202]: "0"
+      - generic [ref=f1e203]: SLA at risk
+    - link "2 On call" [ref=f1e513] [cursor=pointer]:
+      - /url: /shifts
+      - generic [ref=f1e210]: "2"
+      - generic [ref=f1e211]: On call
+    - generic [ref=f1e212]: Updated 14:29
+  - main [ref=f1e215]:
+    - generic [ref=f1e514]:
+      - heading "Form builder" [level=1] [ref=f1e515]
+      - generic [ref=f1e516]:
+        - generic [ref=f1e517]: Form Builder
+        - combobox "Form schema" [ref=f1e519] [cursor=pointer]:
+          - generic [ref=f1e520]: Playwright QA 2026-10-26 1328
+        - generic [ref=f1e523]: draft
+        - button "Associations" [ref=f1e524] [cursor=pointer]
+        - button "Publish" [ref=f1e525] [cursor=pointer]
+        - button "Archive" [ref=f1e526] [cursor=pointer]
+        - button "+ New Schema" [ref=f1e527] [cursor=pointer]
+      - generic [ref=f1e674]:
+        - generic [ref=f1e675]: "1"
+        - generic [ref=f1e676]: pending table change — 1 column to add
+        - button "Review & apply" [ref=f1e677] [cursor=pointer]
+      - generic [ref=f1e528]:
+        - generic [ref=f1e529]:
+          - generic [ref=f1e530]: Field Types
+          - generic [ref=f1e531]:
+            - generic [ref=f1e532]: Basic
+            - button "Short Text" [ref=f1e533] [cursor=pointer]
+            - button "Long Text" [ref=f1e538] [cursor=pointer]
+            - button "Integer" [ref=f1e543] [cursor=pointer]
+            - button "Decimal Number" [ref=f1e548] [cursor=pointer]
+            - button "Yes / No" [ref=f1e553] [cursor=pointer]
+            - button "Date" [ref=f1e558] [cursor=pointer]
+            - button "Date & Time" [ref=f1e563] [cursor=pointer]
+            - button "Time" [ref=f1e568] [cursor=pointer]
+            - button "Email Address" [ref=f1e573] [cursor=pointer]
+            - button "Phone Number" [ref=f1e578] [cursor=pointer]
+            - button "URL" [ref=f1e583] [cursor=pointer]
+          - generic [ref=f1e588]:
+            - generic [ref=f1e589]: Choice
+            - button "Dropdown" [ref=f1e590] [cursor=pointer]
+            - button "Multi-Select" [ref=f1e595] [cursor=pointer]
+            - button "Radio Buttons" [ref=f1e600] [cursor=pointer]
+          - generic [ref=f1e605]:
+            - generic [ref=f1e606]: Media
+            - button "File Upload" [ref=f1e607] [cursor=pointer]
+            - button "Image Upload" [ref=f1e612] [cursor=pointer]
+            - button "Signature" [ref=f1e617] [cursor=pointer]
+          - generic [ref=f1e622]:
+            - generic [ref=f1e623]: Structured
+            - button "GPS Coordinates" [ref=f1e624] [cursor=pointer]
+            - button "Address" [ref=f1e629] [cursor=pointer]
+            - button "Currency Amount" [ref=f1e634] [cursor=pointer]
+            - button "Star Rating" [ref=f1e639] [cursor=pointer]
+          - generic [ref=f1e644]:
+            - generic [ref=f1e645]: Advanced
+            - button "Lookup" [ref=f1e646] [cursor=pointer]
+            - button "Computed (Read-only)" [ref=f1e651] [cursor=pointer]
+          - generic [ref=f1e656]:
+            - generic [ref=f1e657]: Layout
+            - button "Section Header" [ref=f1e658] [cursor=pointer]
+        - generic [ref=f1e664]:
+          - generic [ref=f1e665]:
+            - generic [ref=f1e666]: Playwright QA 2026-10-26 1328
+            - generic [ref=f1e667]: v0 · generic · 1 fieldpw_qa_20261026_1328
+          - generic [ref=f1e678] [cursor=pointer]:
+            - generic [ref=f1e679]:
+              - button "▲" [disabled] [ref=f1e680]
+              - button "▼" [disabled] [ref=f1e681]
+            - generic [ref=f1e685]:
+              - generic [ref=f1e686]: Asset Name*
+              - generic [ref=f1e687]: string_4lvm8 · string
+            - generic [ref=f1e688]: full
+            - button "✕" [ref=f1e690]
+        - generic [ref=f1e671]:
+          - generic [ref=f1e691]:
+            - generic [ref=f1e692]:
+              - generic [ref=f1e693]: Configure Field
+              - generic [ref=f1e694]: string_4lvm8 · string
+            - button "×" [ref=f1e695] [cursor=pointer]
+          - generic [ref=f1e696]:
+            - generic [ref=f1e697]:
+              - generic [ref=f1e698]: Label
+              - textbox [ref=f1e699]: Asset Name
+            - generic [ref=f1e700]:
+              - generic [ref=f1e701]: Placeholder
+              - textbox "Hint shown inside the field" [ref=f1e702]
+            - generic [ref=f1e703]:
+              - generic [ref=f1e704]: Help Text
+              - textbox "Shown below the field" [ref=f1e705]
+            - generic [ref=f1e706]:
+              - generic [ref=f1e707]: Section Group
+              - textbox "Optional section label" [ref=f1e708]
+            - generic [ref=f1e709]:
+              - generic [ref=f1e710]: Width
+              - combobox "Field width" [ref=f1e712] [cursor=pointer]:
+                - generic [ref=f1e713]: Full width
+            - generic [ref=f1e716]:
+              - generic [ref=f1e717]: Behaviour
+              - generic [ref=f1e721] [cursor=pointer]:
+                - generic [ref=f1e722]: Required
+                - generic [ref=f1e723]: Submission fails if this field is empty
+              - generic [ref=f1e727] [cursor=pointer]:
+                - generic [ref=f1e728]: Unique
+                - generic [ref=f1e729]: Value must be unique across all submissions
+              - generic [ref=f1e733] [cursor=pointer]:
+                - generic [ref=f1e734]: Hidden
+                - generic [ref=f1e735]: Not rendered in the form UI
+            - generic [ref=f1e736]:
+              - generic [ref=f1e737]: Validation Rules
+              - generic [ref=f1e738]:
+                - generic [ref=f1e739]: min_length
+                - textbox "Value for min_length" [ref=f1e740]
+              - generic [ref=f1e741]:
+                - generic [ref=f1e742]: max_length
+                - textbox "Value for max_length" [ref=f1e743]
+              - generic [ref=f1e744]:
+                - generic [ref=f1e745]: pattern
+                - textbox "Value for pattern" [ref=f1e746]
+          - generic [ref=f1e747]:
+            - button "Cancel" [ref=f1e748] [cursor=pointer]
+            - button "Save Field" [ref=f1e749] [cursor=pointer]

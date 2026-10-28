@@ -1,0 +1,1500 @@
+OPSYN PLATFORM
+Enterprise Workflow Engine
+Full Refactor & Implementation Plan
+
+
+Phase 5  ·  May 2026  ·  Powered by SlimTech
+Stack: FastAPI · PostgreSQL 16 · SQLAlchemy 2.0 · React 18 · TypeScript · Celery · Redis · Docker
+
+
+Implementation Scope
+Architecture Change
+Task creation — full refactor
+Task Engine → sole project creation mechanism
+Project Type: Internal / External
+External tasks auto-generate Projects
+Department workflow routing
+Workflow-driven, not manually managed
+Dual-approval completion system
+Assignee + Creator both must approve
+Archive reference system (@archive)
+Live search across archived tasks/projects
+Enterprise notification system
+Dept-wide, mention, push-back, delete alerts
+Admin soft-delete + recovery
+Recoverable, audit-logged, mandatory reason
+Full audit governance
+Every action immutably logged
+Pipeline stages: Backlog→Archive
+5-stage workflow with dept ownership
+Migration: 0043 → 0050 (8 new migrations)
+No breaking changes to existing schema
+
+Table of Contents
+Phase 1 — Database Schema & Migrations (0043–0050)
+Phase 2 — Task Engine Core Refactor (Backend)
+Phase 3 — Internal Task Workflow System
+Phase 4 — External Task → Project Automation Engine
+Phase 5 — Department Workflow & Manager Assignment Logic
+Phase 6 — Enterprise Notification System
+Phase 7 — Pipeline System (5 Stages)
+Phase 8 — Dual Approval Completion System
+Phase 9 — Archive Reference System (@archive)
+Phase 10 — Comment & Collaboration System
+Phase 11 — Forward & Backward Workflow Control
+Phase 12 — Admin Task Deletion & Soft-Delete / Recovery
+Phase 13 — Audit & Governance System
+Phase 14 — Frontend Refactor (All Screens)
+Phase 15 — Integration Triggers (External App Sources)
+Phase 16 — QA, Testing & Deployment Checklist
+
+Current System Analysis — What Exists Today
+
+Existing Task System
+Task model: tasks table with 7 states (new/assigned/in_progress/review/blocked/done/archived), state machine via ALLOWED_TRANSITIONS, TaskAuditEntry per transition
+CreateTaskRequest: title, description, priority, status, deadline, department_id, project_id, assignee_user_id — does NOT have task_scope (internal/external) or project_type
+NewTaskModal.tsx: fetches ALL active staff (size=200), no department scoping, no project type selector, no dynamic routing logic
+No auto-project-generation from external tasks
+No department-scoped assignee filtering
+No soft-delete — deleted tasks are gone permanently
+No dual approval system — single "done" → "archived" gate
+No @archive reference system
+
+Existing Project System
+Project model: projects table, project_type ("internal"/"external"), pipeline_template_id, pipeline_stages
+Projects manually created via POST /api/v1/projects
+ProjectsPage.tsx has mismatched project_type options vs backend (already identified as Bug 4)
+Pipeline template system exists: PipelineTemplate, PipelineTemplateStage, ProjectPipelineStage
+Pipeline stages: status field (pending/active/approved/pushed_back)
+No backlog stage — current stages are custom-named in templates
+
+Existing Notification System
+Notification model exists in all_modules.py — type, title, body, action_url, is_read
+NotificationService.create_notification() — per-user, per-session
+No bulk department notification, no mention parsing, no push-back notifications
+
+Existing Audit System
+AuditLog model — actor_id, action, target_type, target_id, before_state, after_state, ip_address, created_at
+AuditService.log() — append-only, immutable, savepoint-safe
+TaskAuditEntry model — task-specific, from_state, to_state, trigger_type, actor_id
+
+Gap Summary
+Feature Required
+Current State
+Phase to Build
+task_scope (internal/external)
+Not in schema
+Phase 1 + Phase 2
+External task → auto project
+Not implemented
+Phase 4
+Dept-scoped assignee search
+All staff fetched
+Phase 2 + 14
+Manager assignment of dept tasks
+Not implemented
+Phase 5
+Bulk dept notifications
+Not implemented
+Phase 6
+5-stage pipeline (Backlog→Archive)
+Custom template stages only
+Phase 7
+Dual approval completion
+Not implemented
+Phase 8
+@archive reference system
+Not implemented
+Phase 9
+Admin soft-delete + recovery
+Hard delete only
+Phase 12
+Forward/backward workflow control
+State machine exists, no dept routing
+Phase 11
+
+Phase 1 — Database Schema & Migrations (0043–0050)
+Alembic migrations must be applied in order. Current head: 0042_staff_efficiency_score. These migrations add all new columns and tables without breaking any existing data or API.
+
+Migration 0043 — Task Engine: task_scope + soft delete + approval columns
+File: backend/alembic/versions/0043_task_workflow_engine.py
+Table modified: tasks
+
+ALTER TABLE tasks
+  ADD COLUMN task_scope        VARCHAR(20)  NOT NULL DEFAULT 'internal',
+  ADD COLUMN is_deleted        BOOLEAN      NOT NULL DEFAULT FALSE,
+  ADD COLUMN deleted_at        TIMESTAMPTZ,
+  ADD COLUMN deleted_by        UUID REFERENCES users(id),
+  ADD COLUMN deletion_reason   TEXT,
+  ADD COLUMN assignee_confirmed_done  BOOLEAN NOT NULL DEFAULT FALSE,
+  ADD COLUMN creator_approved_done    BOOLEAN NOT NULL DEFAULT FALSE,
+  ADD COLUMN assignee_done_at         TIMESTAMPTZ,
+  ADD COLUMN creator_approved_at      TIMESTAMPTZ,
+  ADD COLUMN source_app        VARCHAR(50),   -- sales/hr/field/inventory/integration
+  ADD COLUMN pipeline_stage    VARCHAR(30) NOT NULL DEFAULT 'backlog';
+  -- pipeline_stage: backlog|in_progress|review|unit_done|archive
+
+CREATE INDEX idx_tasks_task_scope  ON tasks(task_scope, tenant_id);
+CREATE INDEX idx_tasks_is_deleted  ON tasks(is_deleted, tenant_id);
+CREATE INDEX idx_tasks_pipeline_stage ON tasks(pipeline_stage, tenant_id);
+
+RLS note: existing RLS policy on tasks already filters by tenant_id. New columns are automatically included.
+
+Migration 0044 — Task Assignment History
+File: backend/alembic/versions/0044_task_assignment_history.py
+New table: task_assignment_logs
+
+CREATE TABLE task_assignment_logs (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  task_id        UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  tenant_id      UUID NOT NULL REFERENCES tenants(id),
+  assigned_by    UUID NOT NULL REFERENCES users(id),
+  assigned_to    UUID NOT NULL REFERENCES users(id),
+  from_dept_id   UUID REFERENCES departments(id),
+  to_dept_id     UUID REFERENCES departments(id),
+  assignment_type VARCHAR(30) NOT NULL, -- initial|reassign|dept_transfer|escalation
+  note           TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_tal_task_id  ON task_assignment_logs(task_id);
+ALTER TABLE task_assignment_logs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY task_asgn_tenant ON task_assignment_logs
+  USING (tenant_id::text = current_setting('app.tenant_id', TRUE));
+
+Migration 0045 — Task Rejection / Push-Back Log
+File: backend/alembic/versions/0045_task_rejection_log.py
+New table: task_rejection_logs
+
+CREATE TABLE task_rejection_logs (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  task_id         UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  tenant_id       UUID NOT NULL REFERENCES tenants(id),
+  rejected_by     UUID NOT NULL REFERENCES users(id),
+  rejection_type  VARCHAR(30) NOT NULL, -- push_back|dept_return|escalation_reject
+  from_dept_id    UUID REFERENCES departments(id),
+  to_dept_id      UUID REFERENCES departments(id),
+  reason          TEXT NOT NULL,
+  previous_status VARCHAR(30),
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_trl_task_id ON task_rejection_logs(task_id);
+ALTER TABLE task_rejection_logs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY task_rej_tenant ON task_rejection_logs
+  USING (tenant_id::text = current_setting('app.tenant_id', TRUE));
+
+Migration 0046 — Task Department Routing
+File: backend/alembic/versions/0046_task_department_routing.py
+New table: task_department_routing — tracks which departments have touched/are holding a task
+
+CREATE TABLE task_department_routing (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  task_id      UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  tenant_id    UUID NOT NULL REFERENCES tenants(id),
+  department_id UUID NOT NULL REFERENCES departments(id),
+  assigned_by  UUID REFERENCES users(id),
+  assigned_to_user_id UUID REFERENCES users(id),
+  routing_order INTEGER NOT NULL,  -- 1 = first dept to receive
+  entered_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  exited_at    TIMESTAMPTZ,
+  exit_reason  VARCHAR(30),   -- completed|pushed_back|escalated|forwarded
+  is_current   BOOLEAN NOT NULL DEFAULT TRUE
+);
+CREATE INDEX idx_tdr_task_id ON task_department_routing(task_id);
+CREATE INDEX idx_tdr_dept_id ON task_department_routing(department_id, is_current);
+
+Migration 0047 — Notification Enhancements
+File: backend/alembic/versions/0047_notification_enhancements.py
+Table modified: notifications (existing in all_modules.py)
+
+ALTER TABLE notifications
+  ADD COLUMN notification_category VARCHAR(30) DEFAULT 'general',
+  -- categories: task_assigned|task_mentioned|push_back|dept_transfer
+  --             approval_needed|task_deleted|completion_approved
+  ADD COLUMN related_task_id    UUID REFERENCES tasks(id),
+  ADD COLUMN related_project_id UUID REFERENCES projects(id),
+  ADD COLUMN related_dept_id    UUID REFERENCES departments(id),
+  ADD COLUMN sender_id          UUID REFERENCES users(id);
+
+Migration 0048 — Task Approval Records
+File: backend/alembic/versions/0048_task_approval_records.py
+New table: task_completion_approvals — dual approval audit trail
+
+CREATE TABLE task_completion_approvals (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  task_id         UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  tenant_id       UUID NOT NULL REFERENCES tenants(id),
+  approval_type   VARCHAR(20) NOT NULL,  -- assignee_done | creator_approved
+  actor_id        UUID NOT NULL REFERENCES users(id),
+  comment         TEXT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_tca_task_id ON task_completion_approvals(task_id);
+
+Migration 0049 — Archive Reference Index
+File: backend/alembic/versions/0049_archive_reference.py
+Full-text search index on archived tasks for the @archive autocomplete feature
+
+CREATE INDEX idx_tasks_archive_fts ON tasks
+  USING gin(to_tsvector('english', title || ' ' || coalesce(description, '')))
+  WHERE pipeline_stage = 'archive' AND is_deleted = FALSE;
+
+CREATE TABLE archive_references (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  task_id         UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  referenced_archive_task_id UUID REFERENCES tasks(id) ON DELETE SET NULL,
+  referenced_archive_project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
+  referenced_by   UUID NOT NULL REFERENCES users(id),
+  tenant_id       UUID NOT NULL REFERENCES tenants(id),
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+Migration 0050 — Project source_task_id (Task-to-Project Link)
+File: backend/alembic/versions/0050_project_source_task.py
+Table modified: projects — links auto-generated projects back to their source external task
+
+ALTER TABLE projects
+  ADD COLUMN source_task_id UUID REFERENCES tasks(id) ON DELETE SET NULL,
+  ADD COLUMN source_app     VARCHAR(50),
+  ADD COLUMN auto_generated BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE INDEX idx_projects_source_task ON projects(source_task_id);
+CREATE INDEX idx_projects_auto ON projects(auto_generated, tenant_id);
+
+Phase 2 — Task Engine Core Refactor (Backend)
+
+2.1  Update Task ORM Model — tasks/models.py
+Add all new columns from Migration 0043 to the Task class. All existing relationships remain unchanged.
+
+# New columns to add to class Task(Base):
+task_scope:               Mapped[str]   = mapped_column(String(20), default="internal")
+pipeline_stage:           Mapped[str]   = mapped_column(String(30), default="backlog")
+is_deleted:               Mapped[bool]  = mapped_column(Boolean, default=False)
+deleted_at:               Mapped[datetime|None] = mapped_column(DateTime(timezone=True))
+deleted_by:               Mapped[uuid.UUID|None] = mapped_column(ForeignKey("users.id"))
+deletion_reason:          Mapped[str|None] = mapped_column(Text)
+source_app:               Mapped[str|None] = mapped_column(String(50))
+assignee_confirmed_done:  Mapped[bool]  = mapped_column(Boolean, default=False)
+creator_approved_done:    Mapped[bool]  = mapped_column(Boolean, default=False)
+assignee_done_at:         Mapped[datetime|None] = mapped_column(DateTime(timezone=True))
+creator_approved_at:      Mapped[datetime|None] = mapped_column(DateTime(timezone=True))
+
+# New ORM models to add to tasks/models.py:
+class TaskAssignmentLog(Base)  -- from migration 0044
+class TaskRejectionLog(Base)   -- from migration 0045
+class TaskDeptRouting(Base)    -- from migration 0046
+class TaskCompletionApproval(Base) -- from migration 0048
+
+2.2  Update Pipeline Stage Constants
+Replace the current 7-state machine constants with the new 5-stage pipeline system. The existing 7 states (new/assigned/in_progress/review/blocked/done/archived) remain for internal workflow tracking. The new pipeline_stage column maps to the 5 required stages:
+
+# New constants in tasks/models.py:
+PIPELINE_STAGES = ["backlog", "in_progress", "review", "unit_done", "archive"]
+
+PIPELINE_STAGE_TRANSITIONS = {
+  "backlog":     ["in_progress"],
+  "in_progress": ["review", "backlog"],       # backward = push_back
+  "review":      ["unit_done", "in_progress"], # backward = send back
+  "unit_done":   ["archive", "review"],       # needs dual approval
+  "archive":     [],                          # terminal
+}
+
+# Maps task.status → pipeline_stage automatically:
+STATUS_TO_PIPELINE_STAGE = {
+  "new":         "backlog",
+  "assigned":    "backlog",
+  "in_progress": "in_progress",
+  "blocked":     "in_progress",
+  "review":      "review",
+  "done":        "unit_done",
+  "archived":    "archive",
+}
+
+2.3  Update CreateTaskRequest Schema
+Refactor the Pydantic schema in tasks/router.py to require the new fields and enforce business rules:
+
+class CreateTaskRequest(BaseModel):
+  title:            str                  # Required
+  task_scope:       str                  # Required: "internal" | "external"
+  description:      str                  # Required (was Optional)
+  deadline:         str                  # Required (was Optional)
+  assignee_user_id: Optional[uuid.UUID]  # Required for internal; Optional for external
+  priority:         str = "medium"
+  department_id:    Optional[uuid.UUID]  # Auto-derived for internal; Required for external
+  project_id:       Optional[uuid.UUID]  # Set automatically for external tasks
+  tags:             list[str] = []
+  estimated_hours:  Optional[float]
+  source_app:       Optional[str] = None  # "sales"|"hr"|"field"|"inventory"|"integration"
+  archive_refs:     list[uuid.UUID] = []  # Referenced archived tasks/projects
+
+  @field_validator("task_scope")
+  def validate_scope(cls, v):
+    if v not in {"internal", "external"}:
+      raise ValueError("task_scope must be internal or external")
+    return v
+
+  @field_validator("description", "deadline")
+  def require_fields(cls, v):
+    if not v or not str(v).strip():
+      raise ValueError("This field is required")
+    return v
+
+2.4  Create Task Service — tasks/service.py
+Extract task business logic from tasks/router.py into a dedicated TaskWorkflowService class. This follows the same pattern as the existing staff_service and audit_service:
+
+# New file: backend/app/modules/tasks/service.py
+class TaskWorkflowService:
+
+  async def create_internal_task(
+    self, db, payload, caller) -> Task:
+    # 1. Validate caller has tasks.create permission
+    # 2. Derive department_id from caller.staff_profile.department_id
+    # 3. Validate assignee is in same department
+    # 4. Generate ticket number (TSK-YYYY-NNNN)
+    # 5. Create Task with task_scope="internal", pipeline_stage="backlog"
+    # 6. Create TaskAssignmentLog entry
+    # 7. Fire notifications to assignee
+    # 8. Write audit log
+    # 9. Return serialized task
+
+  async def create_external_task(
+    self, db, payload, caller) -> tuple[Task, Project]:
+    # 1. Validate caller has tasks.create permission
+    # 2. Validate target department_id is provided
+    # 3. Create Task with task_scope="external", pipeline_stage="backlog"
+    # 4. Auto-generate Project linked to this task
+    # 5. Create initial TaskDeptRouting record
+    # 6. Fire dept-wide notifications
+    # 7. Notify dept manager/team lead
+    # 8. Write audit logs
+    # 9. Return task + project
+
+2.5  Existing Routes to Preserve
+All existing task endpoints remain unchanged in their URL and response shape. Only internal logic is extended:
+GET /api/v1/tasks — add is_deleted=false filter by default; add task_scope filter param
+GET /api/v1/tasks/{id} — no change
+POST /api/v1/tasks — replace with service layer; route to create_internal or create_external
+PATCH /api/v1/tasks/{id}/status — add pipeline_stage sync after state change
+POST /api/v1/tasks/{id}/comments — add @mention parsing and notification trigger
+POST /api/v1/tasks/{id}/archive — now requires dual approval; blocked if not both approved
+
+Phase 3 — Internal Task Workflow System
+
+3.1  Internal Task — Department Scoping Logic
+When task_scope is "internal", the system must:
+Automatically derive the creator's department from caller.staff_profile.department_id
+Set the task's department_id to the creator's department (not user-selectable)
+The assignee selector must only show staff WHERE staff_profiles.department_id = creator_dept_id AND users.is_active = TRUE
+Validate that the selected assignee_user_id belongs to that department — reject with 422 if not
+Set pipeline_stage = "backlog" on creation
+
+3.2  New API Endpoint — Department Staff for Task Assignment
+New endpoint for the internal task assignee selector:
+
+GET /api/v1/tasks/staff/department
+Query params: search: str (optional), size: int = 50
+Auth: get_current_user
+
+Logic:
+  dept_id = caller.staff_profile.department_id
+  SELECT users JOIN staff_profiles ON users.id = staff_profiles.user_id
+  WHERE staff_profiles.department_id = dept_id
+    AND users.is_active = TRUE
+    AND users.id != caller.id  -- exclude self
+    AND (search IS NULL OR
+      LOWER(first_name || ' ' || last_name) LIKE '%' || LOWER(search) || '%'
+      OR LOWER(staff_code) LIKE '%' || LOWER(search) || '%'
+    )
+  LIMIT size
+
+Response: { data: [{ user_id, first_name, last_name, staff_code, job_title }] }
+
+3.3  Internal Workflow Permissions
+Within an internal task, the following role-based permissions apply:
+Action
+Who Can Perform
+Logic
+Push task to next staff
+Assignee, Manager, Team Lead, Admin
+Forward to another dept member; creates TaskAssignmentLog
+Push task backward
+Any assignee, Manager
+Return to previous assignee; must provide reason; creates TaskRejectionLog
+Mark work completed
+Current assignee only
+Sets assignee_confirmed_done=TRUE; triggers notification to creator
+Add comments
+Any task participant
+All staff in dept see the task; all can comment
+Tag/mention users
+Any commenter
+@username in comment body; triggers mention notification
+Request review
+Assignee
+Sets pipeline_stage="review"; notifies manager
+Escalate to supervisor
+Assignee, any dept member
+Notifies manager_user_id; adds SYSTEM comment
+Reassign within dept
+Manager, Team Lead, Admin
+Updates assignee_user_id; creates TaskAssignmentLog
+
+3.4  Internal Task API Endpoints
+POST /api/v1/tasks/{id}/forward
+  Body: { to_user_id: UUID, note?: string }
+  Auth: current assignee OR role.level >= 3 (manager)
+  Action: update assignee_user_id, create TaskAssignmentLog,
+          notify new assignee, write audit
+
+POST /api/v1/tasks/{id}/push-back
+  Body: { to_user_id: UUID, reason: string }
+  Auth: current assignee OR role.level >= 3
+  Action: update assignee_user_id, create TaskRejectionLog,
+          notify affected users, write audit
+
+POST /api/v1/tasks/{id}/escalate
+  Body: { note: string }
+  Auth: any task participant
+  Action: notify manager_user_id, add SYSTEM comment, write audit
+
+POST /api/v1/tasks/{id}/mark-done
+  Auth: current assignee only
+  Action: set assignee_confirmed_done=TRUE, assignee_done_at=now,
+          notify task creator for approval
+
+Phase 4 — External Task → Project Automation Engine
+
+4.1  Core Design Principle — Projects Are No Longer Manually Created
+After this phase is implemented:
+The POST /api/v1/projects endpoint is DEPRECATED for direct use. It continues to exist for backward compatibility but is marked as legacy. The projects module UI is refactored to be read-only — no "Create Project" button.
+All new projects are generated automatically by: (a) External task creation, (b) External app integrations (Sales, HR, Field, Inventory, Integration modules)
+The task engine is the sole project creation gateway for all new operations
+
+4.2  External Task Creation Flow — Step by Step
+When a user creates a task with task_scope="external":
+Backend receives POST /api/v1/tasks with task_scope="external" and department_id (target dept)
+Validate target department exists and belongs to tenant
+Create Task record with task_scope="external", pipeline_stage="backlog"
+Generate project ticket number: PRJ-YYYY-NNNN (same sequence as before but auto-only)
+Auto-generate Project record:
+name = task.title
+project_type = "external"
+source_task_id = task.id
+auto_generated = TRUE
+department_id = payload.department_id (target dept)
+owner_id = caller.id
+due_date = derived from task.deadline
+pipeline_status = "not_started"
+Update task.project_id = new_project.id
+Create TaskDeptRouting record: task enters target dept as routing_order=1
+Fire notifications (Phase 6 — dept-wide alert to target department)
+Write audit log: action="external_task_created_project"
+Return response: { task: {...}, project: {...} }
+
+4.3  Auto-Project Generation Service
+New file: backend/app/modules/projects/auto_generator.py
+
+class ProjectAutoGenerator:
+
+  async def generate_from_task(
+    self, db: AsyncSession,
+    task: Task,
+    caller: User,
+    source_app: str | None = None,
+  ) -> Project:
+    """
+    Called whenever an external task is created.
+    Also called by external app triggers (Sales, HR, etc.)
+    """
+    ticket = await _generate_project_ticket_number(db)
+    project = Project(
+      name=task.title,
+      description=task.description,
+      project_type="external",
+      source_task_id=task.id,
+      auto_generated=True,
+      source_app=source_app or "task_engine",
+      department_id=task.department_id,
+      owner_id=task.created_by,
+      due_date=task.deadline.date() if task.deadline else None,
+      ticket_number=ticket,
+      tenant_id=task.tenant_id,
+      pipeline_status="not_started",
+    )
+    db.add(project)
+    await db.flush()
+    task.project_id = project.id
+    return project
+
+project_auto_generator = ProjectAutoGenerator()
+
+4.4  External App Trigger Endpoints
+These endpoints allow external Opsyn modules to generate projects through workflow triggers. Each endpoint calls project_auto_generator.generate_from_task() with source_app set accordingly:
+
+POST /api/v1/tasks/from-app/{source_app}
+  path param: source_app in {sales, hr, field, inventory, integration}
+  Auth: check_permission("tasks.create") + valid source_app
+  Body: same as CreateTaskRequest but task_scope forced to "external"
+  Returns: { task: {...}, project: {...}, source_app: "sales" }
+
+Example: the Sales module calls POST /api/v1/tasks/from-app/sales to create a project when a lead is won. This replaces the existing webhook handler that called create Project directly.
+
+4.5  Pipeline Auto-Start on Project Creation
+When an auto-generated project is created, if the target department has a default pipeline template configured, the pipeline is auto-started:
+# In auto_generator.generate_from_task():
+default_template = await get_dept_default_template(db, task.department_id)
+if default_template:
+  await pipeline_service.start_pipeline(
+    db, project.id, default_template.id, caller
+  )
+
+Phase 5 — Department Workflow & Manager Assignment Logic
+
+5.1  Initial Department Ownership
+When an external task/project arrives in a department:
+The task is initially unassigned (assignee_user_id = NULL)
+The task shows in the inbox of: Department Manager, Team Lead, Admin, Workflow Supervisor
+These users see the task in a dedicated "Department Inbox" view on their dashboard
+A SYSTEM notification is sent to all users with manager/lead/admin roles in that department
+The task remains in "backlog" pipeline stage until explicitly assigned
+
+5.2  Who Can Assign a Department Task
+Assignment permission check logic — only these users can assign an unassigned external task:
+
+async def check_can_assign(caller: User, task: Task) -> bool:
+  # Must be in the task's target department
+  if caller.staff_profile.department_id != task.department_id:
+    return False
+  # Must have manager/lead/admin role (level >= 3)
+  if caller.role.level >= 3:
+    return True
+  # OR be explicitly tagged as workflow supervisor
+  if caller.staff_profile.approval_authority_level >= 2:
+    return True
+  return False
+
+5.3  Assignment API Endpoint
+POST /api/v1/tasks/{id}/assign
+  Body: {
+    assignee_user_id: UUID,  -- required
+    note: str | None,        -- optional context
+    skill_match: bool = False -- for analytics
+  }
+  Auth: caller must pass check_can_assign()
+  Actions:
+    1. Update task.assignee_user_id
+    2. Update task.status = "assigned"
+    3. Update task.pipeline_stage = "backlog" (stays until started)
+    4. Create TaskAssignmentLog(assignment_type="initial")
+    5. Create TaskDeptRouting record with assigned_to_user_id
+    6. Fire notifications: assignee gets task_assigned alert
+    7. Manager gets assignment_confirmation
+    8. Write audit log
+
+5.4  Reassignment API Endpoint
+POST /api/v1/tasks/{id}/reassign
+  Body: { to_user_id: UUID, reason?: string }
+  Auth: same as assignment (manager/lead/admin in dept)
+  Actions:
+    1. Store old assignee_user_id
+    2. Update task.assignee_user_id = to_user_id
+    3. Create TaskAssignmentLog(assignment_type="reassign")
+    4. Notify new assignee
+    5. Notify old assignee of reassignment
+    6. Write audit log
+
+5.5  Department Task Inbox API
+GET /api/v1/tasks/department-inbox
+  Auth: caller must have role.level >= 3 in their department
+  Returns: tasks WHERE:
+    department_id = caller.department_id
+    AND (assignee_user_id IS NULL OR task_scope = "external")
+    AND is_deleted = FALSE
+    AND pipeline_stage != "archive"
+  Ordered by: created_at ASC (oldest first)
+  Response: { data: { items: [...], total: int } }
+
+Phase 6 — Enterprise Notification System
+
+6.1  Notification Architecture
+Update NotificationService to support:
+Bulk department notifications — notify all staff in a department
+Structured notification categories for frontend rendering and filtering
+Related entity links (task_id, project_id, dept_id)
+Sender tracking (sender_id)
+Celery-backed async delivery for bulk operations
+
+6.2  Updated NotificationService
+class NotificationService:
+
+  async def notify_department(
+    self, db, dept_id, notif_type, title, body,
+    action_url=None, sender_id=None,
+    related_task_id=None, related_project_id=None,
+    exclude_user_ids: list = []):
+    """Notify every active member of a department."""
+    members = await get_dept_members(db, dept_id)
+    for user in members:
+      if str(user.id) in exclude_user_ids: continue
+      await self.create_notification(
+        db, recipient_id=str(user.id),
+        notif_type=notif_type, title=title, body=body,
+        action_url=action_url,
+        notification_category=notif_type,
+        sender_id=sender_id,
+        related_task_id=related_task_id,
+        related_project_id=related_project_id,
+        related_dept_id=dept_id,
+      )
+
+6.3  Notification Event Catalog
+Event
+Trigger
+Recipients
+Category
+External task assigned to dept
+External task created
+ALL dept members + manager
+task_assigned
+Manager assigns task to staff
+POST /tasks/{id}/assign
+Assigned staff member
+task_assigned
+Assignment confirmation
+POST /tasks/{id}/assign
+Assigning manager
+task_assigned
+User mentioned in comment
+@mention in comment body
+Mentioned user(s)
+task_mentioned
+Task pushed back
+POST /tasks/{id}/push-back
+Current + previous assignee, dept mgr, creator
+push_back
+Dept transfer (forward)
+POST /tasks/{id}/forward-dept
+All members of receiving dept + their mgr
+dept_transfer
+Assignee marks done
+POST /tasks/{id}/mark-done
+Task creator (approval needed)
+approval_needed
+Creator approves completion
+POST /tasks/{id}/approve-done
+Assignee
+completion_approved
+Task deleted by admin
+DELETE /tasks/{id}
+Creator's dept manager
+task_deleted
+Deadline approaching
+Celery beat (daily 08:00)
+Assignee + creator
+deadline_reminder
+Escalation raised
+POST /tasks/{id}/escalate
+Dept manager / supervisor
+escalation
+
+6.4  @Mention Parser
+Implement a mention parser that runs on every comment body before saving:
+
+def parse_mentions(body: str) -> list[str]:
+  """Extract @username mentions from comment body."""
+  return re.findall(r'@([a-zA-Z0-9_.-]+)', body)
+
+async def resolve_and_notify_mentions(
+  db, body, task, sender_id, tenant_id):
+  usernames = parse_mentions(body)
+  for username in set(usernames):
+    user = await get_user_by_username(db, username, tenant_id)
+    if user:
+      await notification_service.create_notification(
+        db, recipient_id=str(user.id),
+        notif_type="task_mentioned",
+        title=f"{sender.username} mentioned you in a comment",
+        body=body[:200],
+        action_url=f"/tasks/{task.id}",
+        notification_category="task_mentioned",
+        related_task_id=task.id,
+        sender_id=sender_id,
+      )
+
+6.5  Deadline Reminder Celery Task
+New file: backend/app/tasks/task_reminders.py
+
+@shared_task(name="tasks.send_deadline_reminders")
+def send_deadline_reminders():
+  """Runs daily at 08:00 via Celery beat."""
+  asyncio.run(_send_reminders())
+
+async def _send_reminders():
+  tomorrow = datetime.utcnow() + timedelta(days=1)
+  # Find tasks due tomorrow that are not done/archived
+  tasks = await get_tasks_due_before(db, tomorrow)
+  for task in tasks:
+    if task.assignee_user_id:
+      await notification_service.create_system_notification(
+        recipient_id=str(task.assignee_user_id),
+        notif_type="deadline_reminder",
+        title=f"Task due tomorrow: {task.title}",
+        body=f"Task {task.ticket_number} is due on {task.deadline.date()}",
+        action_url=f"/tasks/{task.id}",
+      )
+
+Phase 7 — Pipeline System (5 Required Stages)
+
+7.1  Required Pipeline Stages
+Every task and project must support these exact 5 workflow stages in order:
+Stage
+Name
+Maps to task.status
+Description
+1
+Backlog
+new / assigned
+Task created, unstarted or newly assigned. Not yet in active execution.
+2
+In Progress
+in_progress / blocked
+Active execution. Assignee is actively working on the task.
+3
+Review
+review
+Work submitted for review by manager or peer. Awaiting approval to proceed.
+4
+Unit Done
+done (assignee approved)
+Assignee confirmed completion. Awaiting creator final approval before archive.
+5
+Archive
+archived (both approved)
+Both approvals received. Task permanently closed and archived.
+
+7.2  Pipeline Stage Sync Logic
+After every task status change, pipeline_stage is automatically synchronized:
+
+async def sync_pipeline_stage(task: Task, new_status: str):
+  task.pipeline_stage = STATUS_TO_PIPELINE_STAGE[new_status]
+  # STATUS_TO_PIPELINE_STAGE mapping (defined in Phase 2.2)
+
+This sync runs inside update_status() after every valid transition, before committing.
+
+7.3  Pipeline Support Capabilities
+Capability
+Implementation
+Department stages
+TaskDeptRouting table tracks which dept currently owns the task at each stage
+Team ownership
+task.department_id + assigned_to_user_id in TaskDeptRouting
+Workflow progression history
+TaskAuditEntry logs every state change; TaskDeptRouting logs dept transitions
+Pending approvals
+pipeline_stage="unit_done" + assignee_confirmed_done=TRUE means awaiting creator
+Rejected phases
+TaskRejectionLog; task pushed back to "in_progress" or previous dept
+Reopened tasks
+Admin can reopen archived task: sets is_deleted=FALSE, pipeline_stage="backlog", clears approvals
+Archived projects
+Project.pipeline_status="completed" when all tasks archived
+Reference-linked projects
+archive_references table links new tasks to archived ones
+Dept visibility tracking
+TaskDeptRouting.is_current=TRUE shows active dept; history preserved
+
+7.4  Pipeline API Endpoints
+GET /api/v1/tasks/pipeline
+  Params: stage (backlog|in_progress|review|unit_done|archive)
+          scope (mine|dept|all)
+  Returns tasks grouped by pipeline_stage for kanban/board view
+
+GET /api/v1/tasks/{id}/pipeline-history
+  Returns full routing history from TaskDeptRouting + TaskAuditEntry
+  Response: { stages: [{dept, user, entered_at, exited_at, status}] }
+
+Phase 8 — Dual Approval Completion System
+
+8.1  Completion Flow — Two Steps Required
+A task CANNOT move to "archive" pipeline stage until BOTH of these steps are completed in order:
+
+Step
+Actor
+Action
+Result
+1
+Assigned staff member
+POST /api/v1/tasks/{id}/mark-done
+assignee_confirmed_done=TRUE; task.pipeline_stage="unit_done"; creator notified
+2
+Task creator (created_by user)
+POST /api/v1/tasks/{id}/approve-done
+creator_approved_done=TRUE; task moves to "archived" status and "archive" stage
+
+8.2  Endpoint: Mark Done (Assignee Step)
+POST /api/v1/tasks/{id}/mark-done
+  Auth: task.assignee_user_id == caller.id
+  Validation:
+    - task.pipeline_stage must be "in_progress" or "review"
+    - task.is_deleted must be FALSE
+    - task.assignee_confirmed_done must be FALSE
+  Actions:
+    1. Set assignee_confirmed_done=TRUE, assignee_done_at=now()
+    2. Set task.pipeline_stage="unit_done"
+    3. Set task.status="done"
+    4. Create TaskCompletionApproval(approval_type="assignee_done")
+    5. Notify creator: "Task {title} is marked done — awaiting your approval"
+    6. Write TaskAuditEntry and AuditLog
+
+8.3  Endpoint: Approve Done (Creator Step)
+POST /api/v1/tasks/{id}/approve-done
+  Auth: task.created_by == caller.id OR role.level >= 4 (admin/manager override)
+  Validation:
+    - task.assignee_confirmed_done must be TRUE (step 1 complete)
+    - task.creator_approved_done must be FALSE
+    - task.is_deleted must be FALSE
+  Actions:
+    1. Set creator_approved_done=TRUE, creator_approved_at=now()
+    2. Set task.pipeline_stage="archive"
+    3. Set task.status="archived"
+    4. Create TaskCompletionApproval(approval_type="creator_approved")
+    5. Notify assignee: "Task approved and archived"
+    6. If task has project_id: check if all project tasks are archived
+       → if yes: set project.pipeline_status="completed"
+    7. Write audit logs
+
+8.4  Reject Completion (Creator Step)
+POST /api/v1/tasks/{id}/reject-done
+  Auth: task.created_by == caller.id
+  Body: { reason: string }
+  Actions:
+    1. Set assignee_confirmed_done=FALSE
+    2. Set task.pipeline_stage="in_progress"
+    3. Set task.status="in_progress"
+    4. Create TaskRejectionLog(rejection_type="completion_rejected")
+    5. Notify assignee: reason provided
+    6. Write audit
+
+8.5  Guard on Archive Endpoint
+Update the existing POST /api/v1/tasks/{id}/archive endpoint to enforce the dual approval gate:
+# In tasks/router.py — archive_task()
+if not task.assignee_confirmed_done or not task.creator_approved_done:
+  raise HTTPException(status_code=422,
+    detail="Dual approval required before archiving. "
+           "Step 1: Assignee must mark done. "
+           "Step 2: Creator must approve completion."
+  )
+
+Phase 9 — Archive Reference System (@archive)
+
+9.1  Backend — Archive Search Endpoint
+GET /api/v1/tasks/archive/search
+  Params: q: str (search query, min 2 chars)
+          limit: int = 10
+  Auth: get_current_user
+  Logic:
+    SELECT tasks WHERE
+      pipeline_stage = "archive"
+      AND is_deleted = FALSE
+      AND tenant_id = caller.tenant_id
+      AND (
+        title ILIKE "%{q}%"
+        OR to_tsvector(title || ' ' || description)
+           @@ plainto_tsquery('{q}')
+      )
+    UNION
+    SELECT projects WHERE
+      pipeline_status = "completed"
+      AND is auto_generated = TRUE
+      AND tenant_id = caller.tenant_id
+      AND name ILIKE "%{q}%"
+    LIMIT limit
+
+  Response: {
+    data: [{
+      id, type (task|project), ticket_number,
+      title/name, archived_at, dept_name,
+      assignee_name
+    }]
+  }
+
+9.2  Archive Reference on Task Creation
+When creating a task, users can reference archived tasks/projects. These are stored in the archive_references table:
+
+# In create_internal_task / create_external_task service:
+if payload.archive_refs:
+  for ref_id in payload.archive_refs:
+    archived = await db.get(Task, ref_id)
+    if archived and archived.pipeline_stage == "archive":
+      ref = ArchiveReference(
+        task_id=new_task.id,
+        referenced_archive_task_id=ref_id,
+        referenced_by=caller.id,
+        tenant_id=caller.tenant_id,
+      )
+      db.add(ref)
+
+9.3  Archive Reference in Comment System
+Users can also reference archived tasks in comments using @archive syntax. The comment parser must detect this and save references:
+
+def parse_archive_refs(body: str) -> list[str]:
+  """Extract @archive[TSK-2024-0012] or @archive mentions."""
+  # Pattern 1: @archive[ticket_number]
+  refs = re.findall(r'@archive\[([A-Z]+-\d{4}-\d+)\]', body)
+  # Pattern 2: plain @archive (triggers search modal in frontend)
+  if "@archive" in body and not refs:
+    return ["__search__"]  # signal to open search UI
+  return refs
+
+Phase 10 — Comment & Collaboration System
+
+10.1  Current Comment System Assessment
+The existing TaskComment model supports: body, type (NORMAL/SYSTEM/ACTION/APPROVAL/BLOCKER), mentions (JSON array), parent_id (threading), approval_action, is_resolved. The add_comment endpoint in tasks/router.py already exists. This phase extends it with:
+Real-time mention notifications (tied to Phase 6 notification system)
+@archive reference parsing and storage
+Activity timeline consolidation (comments + state changes in one feed)
+Comment threading — replies to specific comments
+Unlimited comment history
+
+10.2  Updated add_comment Endpoint
+The existing POST /api/v1/tasks/{id}/comments endpoint must be extended:
+
+async def add_comment(task_id, payload, db, caller):
+  # Existing logic: create TaskComment
+  comment = TaskComment(
+    task_id=task_id, body=payload.body,
+    type=payload.type, parent_id=payload.parent_id,
+    author_user_id=caller.id,
+    mentions=[],  # populated below
+  )
+  db.add(comment)
+  await db.flush()
+
+  # NEW: Parse and notify @mentions
+  usernames = parse_mentions(payload.body)
+  mention_ids = []
+  for uname in set(usernames):
+    user = await get_user_by_username(db, uname, caller.tenant_id)
+    if user:
+      mention_ids.append(str(user.id))
+      await notification_service.create_notification(db, ...)
+  comment.mentions = mention_ids
+
+  # NEW: Parse @archive references
+  arch_refs = parse_archive_refs(payload.body)
+  for ticket in arch_refs:
+    if ticket != "__search__":
+      task_ref = await get_task_by_ticket(db, ticket, caller.tenant_id)
+      if task_ref:
+        db.add(ArchiveReference(task_id=task_id, ...))
+
+  await db.commit()
+
+10.3  Unified Activity Timeline API
+New endpoint that merges comments + audit entries into a single chronological feed:
+
+GET /api/v1/tasks/{id}/timeline
+  Returns: [{
+    id, type (comment|state_change|assignment|push_back|mention),
+    actor: { id, name, staff_code },
+    body/note, created_at,
+    metadata: { from_state, to_state, mentions, dept_name, ... }
+  }]
+  Source: UNION of TaskComment + TaskAuditEntry + TaskAssignmentLog
+          + TaskRejectionLog, ordered by created_at ASC
+
+Phase 11 — Forward & Backward Workflow Control
+
+11.1  Push Forward — Internal Tasks
+POST /api/v1/tasks/{id}/forward
+  Body: { to_user_id: UUID, note?: string }
+  Auth: current assignee OR role.level >= 3
+  Validation: to_user_id must be in same department
+  Actions:
+    1. Create TaskAssignmentLog(assignment_type="reassign")
+    2. Update task.assignee_user_id = to_user_id
+    3. Notify new assignee: "Task forwarded to you"
+    4. Write audit entry
+
+11.2  Push Forward — External Tasks (Department to Department)
+POST /api/v1/tasks/{id}/forward-dept
+  Body: { to_dept_id: UUID, note?: string }
+  Auth: current dept manager/lead OR admin
+  Validation:
+    - task.task_scope must be "external"
+    - to_dept_id must be different from current dept
+    - current routing stage must be completed (pipeline_stage="unit_done")
+  Actions:
+    1. Close current TaskDeptRouting (is_current=FALSE, exited_at=now)
+    2. Create new TaskDeptRouting for to_dept_id
+    3. Update task.department_id = to_dept_id
+    4. Update task.assignee_user_id = NULL (unassigned in new dept)
+    5. Update task.pipeline_stage = "backlog" (resets for new dept)
+    6. Notify ALL members of to_dept_id
+    7. Notify manager of to_dept_id
+    8. Write audit
+
+11.3  Push Backward — Within Department
+POST /api/v1/tasks/{id}/push-back
+  Body: { to_user_id?: UUID, reason: string }
+  Validation: reason is required (min 10 chars)
+  Auth: current assignee OR role.level >= 3
+  Actions:
+    1. Create TaskRejectionLog(rejection_type="push_back", reason=reason)
+    2. If to_user_id provided: update assignee to that user
+    3. Set task.pipeline_stage = "in_progress" (back to active)
+    4. Set task.status = "in_progress"
+    5. Clear assignee_confirmed_done if was TRUE
+    6. Notify: previous assignee, current assignee, dept mgr, creator
+    7. Write audit with rejection reason stored permanently
+
+11.4  Push Backward — Department to Department (External Tasks)
+POST /api/v1/tasks/{id}/return-dept
+  Body: { reason: string }
+  Auth: current dept manager/lead OR admin
+  Validation:
+    - task.task_scope must be "external"
+    - Must have a previous routing entry to return to
+  Actions:
+    1. Get previous TaskDeptRouting entry (routing_order = current - 1)
+    2. Close current routing entry
+    3. Reactivate previous routing entry (is_current=TRUE)
+    4. Update task.department_id = previous dept
+    5. Update task.pipeline_stage = "in_progress"
+    6. Create TaskRejectionLog(rejection_type="dept_return")
+    7. Notify: current dept members, previous dept members + manager, creator
+    8. Notification body includes rejection reason
+    9. Write audit
+
+11.5  Rejection Reason Permanence
+All rejection reasons are:
+Stored permanently in task_rejection_logs table (never editable, never deletable)
+Included in the TaskAuditEntry note field
+Visible in the unified timeline for the task
+Visible in the department routing history
+Included in notification messages to all affected parties
+
+Phase 12 — Admin Task Deletion Control & Soft Delete / Recovery
+
+12.1  Soft Delete Implementation
+Replace the existing hard delete logic with soft delete. No task data is ever permanently removed except by explicit purge:
+
+DELETE /api/v1/tasks/{id}
+  Body: { reason: string }   # required
+  Auth: check_permission("tasks.delete") — admin/manager only
+  Validation:
+    - reason must not be empty (min 10 chars)
+    - caller must have role.level >= 4 (Admin level)
+  Actions:
+    1. Set task.is_deleted=TRUE
+    2. Set task.deleted_at=now()
+    3. Set task.deleted_by=caller.id
+    4. Set task.deletion_reason=reason
+    5. Find creator's department manager (task.created_by → staff_profile → manager_user_id)
+    6. Notify creator's dept manager:
+       "Task {ticket_number} was deleted by {admin_name}"
+       Reason: "{reason}"
+    7. Write immutable AuditLog: action="task_soft_deleted"
+       before_state: full task snapshot
+       after_state: { is_deleted: true, deletion_reason: reason }
+    8. Return 204 No Content
+
+12.2  Audit Log on Delete
+The deletion audit record must contain:
+actor_id: admin who deleted
+target_type: "task"
+target_id: task UUID
+before_state: complete task snapshot (all fields, no password hash)
+after_state: { is_deleted: true, deleted_at, deleted_by, deletion_reason }
+ip_address: from request headers
+Affected department ID stored in metadata
+
+12.3  Task Recovery (Restore from Soft Delete)
+POST /api/v1/tasks/{id}/restore
+  Auth: check_permission("tasks.delete") — same admin permission
+  Validation: task.is_deleted must be TRUE
+  Actions:
+    1. Set task.is_deleted=FALSE
+    2. Clear task.deleted_at, task.deleted_by, task.deletion_reason
+    3. Set task.pipeline_stage="backlog" (restore to start of pipeline)
+    4. Notify original creator and assignee of restoration
+    5. Write AuditLog: action="task_restored"
+
+12.4  Permanent Purge (Admin Only)
+DELETE /api/v1/tasks/{id}/purge
+  Auth: check_permission("tasks.purge") — super-admin only
+  Validation: task.is_deleted must be TRUE (must soft-delete first)
+  Actions:
+    1. Hard delete the task and all related records (cascade)
+    2. Write immutable AuditLog: action="task_purged"
+    3. This action is IRREVERSIBLE
+
+12.5  Default Behavior — Exclude Deleted Tasks from All Queries
+Every list endpoint and GET endpoint must filter deleted tasks by default:
+# In every task query, add:
+.where(Task.is_deleted == False)
+# Admin-only endpoint to view deleted tasks:
+GET /api/v1/tasks/deleted
+  Auth: check_permission("tasks.delete")
+  Returns: tasks WHERE is_deleted=TRUE, ordered by deleted_at DESC
+
+Phase 13 — Audit & Governance System
+
+13.1  Audit Actions Catalog — Every Action Must Be Logged
+Action
+Trigger
+Fields Logged
+task.created
+POST /tasks
+task_scope, title, dept, assignee, creator, deadline
+task.assigned
+POST /tasks/{id}/assign
+assigner, assignee (old → new), dept, note
+task.reassigned
+POST /tasks/{id}/reassign
+old assignee, new assignee, reason, assigner
+task.forward
+POST /tasks/{id}/forward
+from_user, to_user, note
+task.forward_dept
+POST /tasks/{id}/forward-dept
+from_dept, to_dept, note, routing_order
+task.push_back
+POST /tasks/{id}/push-back
+actor, to_user, reason, previous pipeline_stage
+task.return_dept
+POST /tasks/{id}/return-dept
+actor, from_dept, to_dept, reason
+task.status_changed
+PATCH /tasks/{id}/status
+from_state, to_state, trigger_type, pipeline_stage
+task.comment_added
+POST /tasks/{id}/comments
+author, type, mentions[], archive_refs[]
+task.marked_done
+POST /tasks/{id}/mark-done
+assignee, timestamp, pipeline_stage=unit_done
+task.creator_approved
+POST /tasks/{id}/approve-done
+creator, timestamp, pipeline_stage=archive
+task.completion_rejected
+POST /tasks/{id}/reject-done
+creator, reason, pipeline_stage restored
+task.soft_deleted
+DELETE /tasks/{id}
+admin, reason, full before_state snapshot
+task.restored
+POST /tasks/{id}/restore
+admin, timestamp
+task.purged
+DELETE /tasks/{id}/purge
+admin, timestamp, IRREVERSIBLE flag
+task.archived_ref
+@archive in creation/comment
+referenced task/project IDs
+project.auto_generated
+External task creation
+source_task_id, source_app, dept
+project.pipeline_completed
+All tasks archived
+project_id, completion timestamp
+dept.task_received
+External task routing
+from_dept, to_dept, task_id, routing_order
+
+13.2  Audit Record Structure
+Each audit record uses the existing AuditLog model, extended with structured metadata:
+actor_id: UUID of user performing the action
+action: string from catalog above (e.g. "task.push_back")
+target_type: "task" | "project" | "department"
+target_id: UUID of the affected entity
+before_state: JSONB snapshot of entity before change
+after_state: JSONB snapshot of entity after change
+ip_address: from X-Forwarded-For or client.host
+tenant_id: mandatory for RLS compliance
+created_at: immutable timestamp
+
+13.3  Audit Query API
+GET /api/v1/audit
+  Existing endpoint — extend with new filter params:
+  Params: action, target_type, target_id, actor_id, date_from, date_to
+  Returns: paginated audit log entries
+  Auth: check_permission("audit.view")
+
+Phase 14 — Frontend Refactor (All Screens)
+
+14.1  Task Creation Modal — Full Redesign
+File: frontend/src/pages/tasks/components/NewTaskModal.tsx
+The current modal is a simple flat form. It must be replaced with a dynamic routing modal that branches based on task_scope:
+
+Step 1 — Task Scope Selection:
+Full-width modal opens with two large buttons: "Internal Task" and "External Task"
+Internal: subtitle "Assign within your department"
+External: subtitle "Route to another department (creates a project)"
+
+Step 2A — Internal Task Form Fields:
+Field
+Input Type
+Behaviour
+Task Name
+Text input
+Required. Min 3 chars.
+Active Status
+Toggle switch
+Default: active. Maps to status="new".
+Deadline
+Date picker
+Required. Must be future date.
+Created By
+Read-only auto-fill
+Populated from current user session.
+Task Scope
+Read-only badge "Internal"
+Set in Step 1. Not editable here.
+Assignee
+Searchable dropdown
+Fetches GET /tasks/staff/department. Live search while typing. Shows: name, staff code, job title.
+Description
+Textarea
+Required. Min 10 chars.
+Priority
+Segmented control
+Options: Critical / High / Medium / Low
+Tags
+Tag input
+Comma-separated, free-form.
+@archive reference
+Autocomplete trigger
+Type "@archive" to open archive search popover. Attach up to 5 references.
+
+Step 2B — External Task Form Fields:
+Field
+Input Type
+Behaviour
+Task Name
+Text input
+Required. Becomes project name.
+Target Department
+Searchable dropdown
+Fetches GET /org/departments. All departments shown. Autocomplete. Required.
+Deadline
+Date picker
+Required. Sets project due_date.
+Description
+Textarea
+Required. Min 10 chars.
+Priority
+Segmented control
+Critical / High / Medium / Low.
+@archive reference
+Autocomplete trigger
+Same as internal.
+
+After submission of external task: show success modal: "External task created. Project PRJ-YYYY-NNNN automatically generated and assigned to [Dept Name]."
+
+14.2  Archive Search Popover Component
+File: frontend/src/components/tasks/ArchiveSearchPopover.tsx
+Triggers when user types "@archive" in task creation form or comment box
+Opens an inline popover with a search input
+Debounced search (300ms) calls GET /api/v1/tasks/archive/search?q={query}
+Displays results as cards: ticket number, title, dept, archived date
+Click to select: attaches reference to task/comment
+Selected references shown as removable chips below the input
+Empty state: "No archived tasks/projects match your search"
+
+14.3  Task Detail Page — Enhanced
+File: frontend/src/pages/tasks/TaskDetailPage.tsx
+Refactor to include all new workflow controls:
+Pipeline Stage Rail: 5-stage visual rail (Backlog → In Progress → Review → Unit Done → Archive) showing current stage highlighted
+Workflow Actions Panel: context-aware buttons based on current user's role and task state
+Dual Approval Status Widget: shows both approval steps with status (pending/approved)
+Routing History Tab: shows dept routing history from TaskDeptRouting + audit trail
+Unified Timeline Tab: comments + state changes + assignments in chronological order
+@mention autocomplete: typing @ in comment box opens user selector
+@archive autocomplete: typing @archive opens archive search popover
+
+14.4  Workflow Actions Panel — Context-Aware Buttons
+Button
+Visible When
+Action
+Mark as Done
+Current assignee + not yet marked done
+POST /tasks/{id}/mark-done → sets Unit Done stage
+Approve Completion
+Creator + assignee marked done
+POST /tasks/{id}/approve-done → archives task
+Reject Completion
+Creator + assignee marked done
+POST /tasks/{id}/reject-done → shows reason input
+Forward to Staff
+Internal + assignee/manager
+Opens staff selector → POST /tasks/{id}/forward
+Push Back
+Assignee / manager / any authorized
+Opens reason input → POST /tasks/{id}/push-back
+Forward to Dept
+External + dept manager/admin
+Opens dept selector → POST /tasks/{id}/forward-dept
+Return to Dept
+External + dept manager/admin
+Opens reason input → POST /tasks/{id}/return-dept
+Escalate
+Any task participant
+Opens note input → POST /tasks/{id}/escalate
+Delete Task
+Admin only
+Opens mandatory reason modal → DELETE /tasks/{id}
+Restore Task
+Admin + task is deleted
+POST /tasks/{id}/restore
+
+14.5  Projects Module — Read-Only Refactor
+File: frontend/src/pages/projects/ProjectsPage.tsx
+Remove "Create Project" button entirely
+Replace with banner: "Projects are automatically generated from External Tasks. Go to Tasks to create a new workflow."
+Add "Create External Task" quick-action button that opens NewTaskModal with External pre-selected
+Project list now shows: ticket number, source task reference, auto-generated badge, current pipeline stage, dept name
+Filter by: department, pipeline status, date range, source app
+
+14.6  Department Inbox View
+File: frontend/src/pages/tasks/DeptInboxPage.tsx (new file)
+Visible only to users with role.level >= 3 (managers/leads)
+Shows unassigned external tasks routed to their department
+Each card shows: task title, ticket number, origin (who sent it), deadline, priority
+Action button per card: "Assign to Staff" → opens searchable staff selector
+Quick stats: total pending, oldest task age, overdue count
+
+14.7  Notification Bell — Enhanced
+File: frontend/src/layouts/Topbar.tsx + frontend/src/pages/notifications/NotificationsPage.tsx
+Group notifications by category: Task Activity / Mentions / Approvals / Dept Transfers / System
+Category-colored left border on each notification card
+Clickable: navigates to relevant task/project
+Mark-all-read button per category
+30-second polling already exists — keep it
+
+Phase 15 — Integration Triggers (External App Sources)
+
+15.1  External App → Task → Project Pipeline
+The following Opsyn modules can generate projects through the task engine by calling POST /api/v1/tasks/from-app/{source_app}:
+Source App
+Trigger Event
+External Task Generated
+Project Source Label
+Sales App
+lead.won webhook received
+title="Sales Project: {lead_name}", dept=sales_dept
+source_app="sales"
+HR App
+staff.hired, org.restructure
+title="HR Initiative: {event_type}", dept=hr_dept
+source_app="hr"
+Field App
+outage.detected, field.survey
+Links to existing OutageIncident; creates parallel project
+source_app="field"
+Inventory App
+stock.critical, procurement.needed
+title="Procurement: {item}", dept=procurement_dept
+source_app="inventory"
+Integration App
+Webhook from any external system
+Payload mapped to CreateTaskRequest
+source_app="integration"
+SmartOLT
+OLT alarm (already implemented)
+Links OutageIncident.linked_task_id (already wired)
+source_app="smartolt"
+
+15.2  Webhook Handler Update
+Update the existing webhook domain handlers in app/modules/webhooks/router.py to use the new task engine instead of creating projects directly:
+
+# Before (existing):
+# Sales handler creates Project directly
+project = Project(name=lead_name, ...)
+
+# After (new):
+task_payload = CreateTaskRequest(
+  title=f"Sales Project: {lead_name}",
+  task_scope="external",
+  department_id=sales_dept_id,
+  deadline=str(due_date),
+  description=f"Lead converted: {lead_name}",
+  source_app="sales",
+)
+task, project = await task_workflow_service.create_external_task(
+  db, task_payload, system_user
+)
+
+Phase 16 — QA / Testing & Deployment Checklist
+
+16.1  Backend Test Suite — Per Phase
+Phase
+Test File
+Key Test Cases
+1
+tests/integration/test_migrations.py
+All 8 migrations apply cleanly; rollback works; no FK violations
+2
+tests/unit/test_task_service.py
+create_internal_task validates dept scoping; create_external_task generates project; ticket numbers unique
+3
+tests/integration/test_internal_workflow.py
+Assignee must be in same dept; forward/push-back permission enforcement; escalation notification fired
+4
+tests/integration/test_project_automation.py
+External task → project auto-created; project.source_task_id set; pipeline auto-started if template exists
+5
+tests/integration/test_assignment.py
+Only manager/lead can assign dept tasks; TaskAssignmentLog created; unassigned inbox correct
+6
+tests/unit/test_notifications.py
+notify_department sends to all active members; mentions parsed correctly; push-back notifies all 4 recipients
+7
+tests/unit/test_pipeline_stages.py
+STATUS_TO_PIPELINE_STAGE mapping correct; pipeline sync runs on every status change
+8
+tests/integration/test_dual_approval.py
+Cannot archive without both approvals; rejection resets stage; project completes when all tasks archived
+9
+tests/integration/test_archive_search.py
+FTS index returns correct results; @archive parse extracts ticket refs; ArchiveReference records created
+12
+tests/integration/test_soft_delete.py
+Soft delete hides task from all list queries; restore reverses all fields; purge is permanent; audit logged
+13
+tests/integration/test_audit.py
+Every workflow action produces AuditLog; before/after state correct; immutable (no update/delete)
+
+16.2  Frontend QA Checklist
+NewTaskModal — scope selector renders; internal shows dept staff only; external shows all departments
+External task submission — success modal shows project ticket number
+@archive trigger — popover opens on "@archive" in task form and comment box; search debounced 300ms
+Mention autocomplete — "@" in comment box shows user list; notification fires on submit
+Department Inbox — visible to managers; assign button triggers staff selector; disappears when assigned
+Task Detail — pipeline stage rail shows correct active stage; workflow buttons context-sensitive
+Dual approval — Mark Done button visible to assignee only; Approve/Reject visible to creator only
+Projects page — no Create button; auto-generated badge on projects; source task link works
+Notifications — category grouping renders; unread count updates every 30s; click navigates to task
+Admin delete — reason field mandatory; confirmation modal; task disappears from list; restored via admin panel
+
+16.3  Deployment Checklist
+Run migrations in order: 0043 → 0044 → 0045 → 0046 → 0047 → 0048 → 0049 → 0050
+Verify: alembic current → head should be 0050_project_source_task
+Run: python -m py_compile on all new/modified .py files
+Run: cd frontend && npx vite build — zero TypeScript errors expected
+Run full test suite: pytest backend/tests/ -x -q
+Start services: docker compose up --build opsyn_backend opsyn_celery opsyn_celery_beat
+Add new Celery beat task to celery_app.py: tasks.send_deadline_reminders — 86400s (daily)
+Smoke test: POST /api/v1/tasks (internal) → 201; POST /api/v1/tasks (external) → 201 + project created
+Smoke test: POST /tasks/{id}/mark-done → 200; POST /tasks/{id}/approve-done → archived
+Smoke test: GET /tasks/archive/search?q=test → results array (even if empty)
+Smoke test: DELETE /tasks/{id} → 204; GET /tasks/{id} → 404 (hidden); GET /tasks/deleted → shows deleted task
+Verify audit log: GET /api/v1/audit?target_type=task → shows all new action types
+
+16.4  Rollback Plan
+If any phase fails in production:
+Migrations 0043–0050: all use ALTER TABLE ADD COLUMN and CREATE TABLE (no data modification) — safe to rollback with alembic downgrade -1 per step
+Backend code: all new functionality is in new endpoints and service methods. Existing endpoints are extended but backward-compatible.
+Frontend: NewTaskModal is a new component. If it fails, the old modal can be temporarily restored.
+No existing API contracts are broken — all new fields are additive. Old clients continue to work.
+
+Opsyn Enterprise Workflow Engine — Implementation Plan · Phase 5 · May 2026 · Powered by SlimTech

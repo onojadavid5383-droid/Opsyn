@@ -1,0 +1,65 @@
+/* Form fields — Input, Textarea (Select shares the look via GlassSelect).
+   Sentence-case labels; 3:1 input borders; errors linked to their field. */
+
+.field { margin-bottom: var(--space-4); }
+
+.label {
+  display: block;
+  margin-bottom: var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-primary);
+}
+.required { margin-left: 2px; color: var(--text-secondary); }
+
+.control { position: relative; display: flex; align-items: center; }
+
+.input {
+  width: 100%;
+  height: var(--control-lg);
+  padding: 0 var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--text-md);
+  outline: none;
+  transition: border-color var(--duration-fast) var(--ease-standard), box-shadow var(--duration-fast) var(--ease-standard);
+}
+.input::placeholder { color: var(--text-muted); }
+.input:hover:not(:disabled):not(:focus) { border-color: var(--text-secondary); }
+.input:focus { border-color: var(--focus-ring); box-shadow: 0 0 0 1px var(--focus-ring); }
+.input[aria-invalid='true'] { border-color: var(--status-critical-fg); }
+.input[aria-invalid='true']:focus { box-shadow: 0 0 0 1px var(--status-critical-fg); }
+.input:disabled { background: var(--surface-sunken); color: var(--text-disabled); cursor: not-allowed; }
+.input[readonly] { background: var(--surface-sunken); }
+
+textarea.input { height: auto; padding: var(--space-2) var(--space-3); line-height: var(--leading-body); resize: vertical; }
+
+.hasPrefix { padding-left: 36px; }
+.hasSuffix { padding-right: 36px; }
+
+.affix {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+.prefix { left: var(--space-3); }
+.suffix { right: var(--space-3); }
+
+/* Units for telecom values (dBm, km, m, %) — part of the value, so mono */
+.unit {
+  position: absolute;
+  right: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.message { margin-top: var(--space-1); font-size: var(--text-xs); color: var(--text-secondary); }
+.error { color: var(--status-critical-fg); }
+
+@media (pointer: coarse) { .input { min-height: var(--touch-min); } }

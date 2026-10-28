@@ -1,0 +1,69 @@
+/* Button — solid workbench control (glass buttons live in components/glass). */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-weight: var(--weight-medium);
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+.btn:disabled, .btn[aria-disabled='true'] { cursor: not-allowed; opacity: 0.5; }
+.btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.full { width: 100%; }
+
+/* Sizes — nothing under 12px */
+.xs { height: var(--control-sm); padding: 0 var(--space-2); font-size: var(--text-xs); }
+.sm { height: var(--control-md); padding: 0 var(--space-3); font-size: var(--text-sm); }
+.md { height: 36px;               padding: 0 var(--space-4); font-size: var(--text-md); }
+.lg { height: 44px;               padding: 0 var(--space-5); font-size: var(--text-md); }
+
+/* Primary — the one main action. Brand teal, ink label (8.1:1). */
+.primary { background: var(--brand); color: var(--brand-contrast); }
+.primary:hover:not(:disabled) { background: var(--brand-hover); }
+
+/* Secondary — alternative actions */
+.secondary {
+  background: var(--surface);
+  border-color: var(--border-input);
+  color: var(--text-primary);
+}
+.secondary:hover:not(:disabled) { background: var(--surface-sunken); border-color: var(--text-secondary); }
+
+/* Ghost — low-emphasis actions (Cancel, "Open board") */
+.ghost { background: transparent; color: var(--text-primary); }
+.ghost:hover:not(:disabled) { background: var(--surface-hover); }
+
+/* Danger — destructive. Solid red for the confirm step; outline for entry points. */
+.danger {
+  background: var(--surface);
+  border-color: var(--status-critical-fg);
+  color: var(--status-critical-fg);
+}
+.danger:hover:not(:disabled) { background: var(--status-critical-bg); }
+.dangerSolid { background: var(--status-critical-fill); color: var(--status-critical-on-fill); }
+.dangerSolid:hover:not(:disabled) { filter: brightness(0.92); }
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  animation: spin 0.6s linear infinite;
+  flex-shrink: 0;
+}
+
+@media (pointer: coarse) {
+  .xs, .sm, .md { min-height: var(--touch-min); }
+}
